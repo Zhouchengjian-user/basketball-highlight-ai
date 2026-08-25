@@ -1,0 +1,35 @@
+.DS_Store
+
+# 本地密钥与机器配置
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python / test caches
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.py[cod]
+
+# 用户上传、模型分析与生成成片
+.data/
+uploads/
+*.mp4
+*.mov
+*.m4v
+*.webm
+*.aiff
+*.m4a
+
+# 授权人声属于私有素材，不随源码发布
+static/voice-authorized-*.wav
+
+# 本地日志与打包产物
+*.log
+dist/
+*.zip
