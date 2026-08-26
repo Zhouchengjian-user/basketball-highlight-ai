@@ -346,6 +346,10 @@ GROUNDED_OUTCOME_PATTERNS = {
     "rebound": re.compile(r"篮板"),
     "stoppage": re.compile(r"停表|停下|停止|中断|暂停|死球|回合停"),
 }
+MADE_SHOT_RESULT_HEAD_RE = re.compile(
+    r"^(?P<head>有了|进了|命中|打进|得分)[！!。]?"
+)
+MADE_SHOT_RESULT_HEADS = ("有了", "进了", "命中", "打进")
 RETROSPECTIVE_RESULT_ACTION_RE = re.compile(
     r"传球|分球|传给|传到|接球|拿球|持球|控球|运球|推进|组织|"
     r"突破|变向|过人|晃开|摆脱|启动|杀入|冲入|反击|快攻|对抗|擦板|"
@@ -2595,25 +2599,113 @@ def _diversify_repeated_grounded_calls(
     events: list[GroundedEvent],
     duration: float,
 ) -> list[CommentaryBeat]:
-    """Replace nearby exact template repeats with another event-safe fallback."""
+    """Vary repeated live calls without changing their event-level facts.
+
+    Exact-line comparison alone misses the repetition people actually hear:
+    ``打进！上篮得手`` and ``打进！漂亮`` are different strings but the same
+    result call.  Keep the grounded tail and rotate only the already-confirmed
+    made-shot head.  A four-call window can therefore use four natural live
+    reactions without inventing a shot type, player, score, or foul.
+    """
     if len(beats) < 2:
         return beats
     event_index = {event.event_id: event for event in events}
     recent: dict[str, int] = {}
+    recent_made_heads: list[str] = []
     diversified: list[CommentaryBeat] = []
     for index, beat in enumerate(beats):
+        replacement = beat
+        if beat.event_kind == "made_shot":
+            head_match = MADE_SHOT_RESULT_HEAD_RE.match(beat.text)
+            if head_match:
+                current_head = head_match.group("head")
+                unavailable = set(recent_made_heads[-3:])
+                if current_head in unavailable:
+                    event = event_index.get(beat.event_id or "")
+                    available = tuple(
+                        head
+                        for head in MADE_SHOT_RESULT_HEADS
+                        if head not in unavailable
+                    )
+                    if available:
+                        if event is not None:
+                            selected_head = _stable_event_phrase(
+                                event,
+                                available,
+                                salt="made_result_head",
+                            )
+                        else:
+                            selected_head = available[0]
+                        tail = beat.text[head_match.end() :].lstrip("！!。 ")
+                        replacement = replace(
+                            beat,
+                            text=selected_head + "！" + tail,
+                        )
+                        current_head = selected_head
+                recent_made_heads.append(current_head)
+
+                tail = replacement.text[head_match.end() :].strip("！!。 ")
+                next_time = (
+                    beats[index + 1].time
+                    if index + 1 < len(beats)
+                    else duration
+                )
+                if not tail and next_time - beat.time >= 2.7:
+                    event = event_index.get(beat.event_id or "")
+                    reaction_options = (
+                        "机会把握住了！",
+                        "这次没有浪费机会！",
+                        "这一球收下了！",
+                        "这一下把握住了！",
+                    )
+                    reaction = (
+                        _stable_event_phrase(
+                            event,
+                            reaction_options,
+                            salt="made_result_reaction",
+                        )
+                        if event is not None
+                        else reaction_options[index % len(reaction_options)]
+                    )
+                    replacement = replace(
+                        replacement,
+                        text=current_head + "！" + reaction,
+                    )
+
+        beat = replacement
         signature = re.sub(r"[，,；;。！？!?\s]", "", beat.text)
         repeated = signature and index - recent.get(signature, -99) <= 5
-        replacement = beat
         if repeated:
             event = event_index.get(beat.event_id or "")
             fallback = (
-                _fallback_grounded_beats([event], duration)
+                _fallback_grounded_beats([event], duration, allow_praise=False)
                 if event is not None
                 else []
             )
             if fallback:
                 candidate = fallback[0].text
+                if beat.event_kind == "made_shot":
+                    candidate_head = MADE_SHOT_RESULT_HEAD_RE.match(candidate)
+                    unavailable = set(recent_made_heads[-3:])
+                    if candidate_head and candidate_head.group("head") in unavailable:
+                        available = tuple(
+                            head
+                            for head in MADE_SHOT_RESULT_HEADS
+                            if head not in unavailable
+                        )
+                        if available and event is not None:
+                            selected_head = _stable_event_phrase(
+                                event,
+                                available,
+                                salt="made_result_head_fallback",
+                            )
+                            tail = candidate[candidate_head.end() :].lstrip(
+                                "！!。 "
+                            )
+                            candidate = selected_head + "！" + tail
+                    final_candidate_head = MADE_SHOT_RESULT_HEAD_RE.match(candidate)
+                    if final_candidate_head and recent_made_heads:
+                        recent_made_heads[-1] = final_candidate_head.group("head")
                 candidate_signature = re.sub(r"[，,；;。！？!?\s]", "", candidate)
                 if candidate_signature and candidate_signature not in recent:
                     replacement = replace(beat, text=candidate)
@@ -2621,6 +2713,41 @@ def _diversify_repeated_grounded_calls(
         if signature:
             recent[signature] = index
         diversified.append(replacement)
+    return diversified
+
+
+def _diversify_repeated_praise_words(
+    beats: list[CommentaryBeat],
+) -> list[CommentaryBeat]:
+    """Keep the familiar ``好球`` reaction, but do not chant it all clip."""
+    seen_good_ball = False
+    replacements = {
+        "made_shot": ("漂亮", "这球把握得真稳", "干净利落", "这一下处理得够果断"),
+        "block": ("好帽", "这一下守得真好", "防得真漂亮"),
+        "steal": ("断得漂亮", "这一下抢得真准", "防得真好"),
+        "rebound": ("保护得真稳", "这个球拿得真扎实", "篮板收得漂亮"),
+    }
+    diversified: list[CommentaryBeat] = []
+    for beat in beats:
+        if "好球" not in beat.text:
+            diversified.append(beat)
+            continue
+        if not seen_good_ball:
+            seen_good_ball = True
+            diversified.append(beat)
+            continue
+        options = replacements.get(
+            beat.event_kind,
+            ("漂亮", "处理得真稳", "这一下够果断"),
+        )
+        seed = beat.event_id or f"{beat.time:.2f}:{beat.event_kind}"
+        offset = sum(
+            (index + 1) * ord(character)
+            for index, character in enumerate(seed)
+        ) % len(options)
+        diversified.append(
+            replace(beat, text=beat.text.replace("好球", options[offset], 1))
+        )
     return diversified
 
 
@@ -4131,7 +4258,9 @@ def _apply_cadence_punctuation(
 ) -> list[CommentaryBeat]:
     if not beats:
         return beats
-    result_pattern = re.compile(r"命中|打进|得分|得手|扣篮|封盖|盖帽|绝杀|压哨")
+    result_pattern = re.compile(
+        r"^(?:有了|进了)[！!。]?|命中|打进|得分|得手|扣篮|封盖|盖帽|绝杀|压哨"
+    )
     cadenced: list[CommentaryBeat] = []
     for index, beat in enumerate(beats):
         text = beat.text.rstrip("。！？")
@@ -4339,6 +4468,54 @@ def _commentary_targets(duration: float) -> tuple[int, int, int, int]:
     return minimum, target, maximum, beats
 
 
+GROUNDED_REWRITE_IMPLIED_MADE_RE = re.compile(
+    r"就有(?:了)?|把握住(?:了)?|没有浪费(?:这次)?机会|这一球收下(?:了)?"
+)
+
+
+def _grounded_cadence_rewrite_is_safe(
+    original: CommentaryBeat,
+    revised_text: str,
+) -> bool:
+    """Reject cadence-only prose that changes an atomic event's meaning."""
+    if not original.event_id and not original.event_kind:
+        return True
+    claims = {
+        kind
+        for kind, pattern in GROUNDED_OUTCOME_PATTERNS.items()
+        if pattern.search(revised_text)
+    }
+    if claims and original.event_kind not in claims:
+        return False
+    if (
+        original.hard_anchor
+        and original.event_kind in GROUNDED_OUTCOME_PATTERNS
+        and original.event_kind not in claims
+    ):
+        return False
+    if (
+        original.event_kind not in GROUNDED_RESULT_KINDS
+        and GROUNDED_REWRITE_IMPLIED_MADE_RE.search(revised_text)
+    ):
+        return False
+
+    source_tags = set(
+        _verified_basketball_detail_tags(
+            original.event_kind,
+            original.text,
+            "",
+        )
+    )
+    revised_tags = set(
+        _verified_basketball_detail_tags(
+            original.event_kind,
+            revised_text,
+            "",
+        )
+    )
+    return revised_tags.issubset(source_tags)
+
+
 def _rewrite_beats_for_cadence(
     beats: list[CommentaryBeat],
     duration: float,
@@ -4413,6 +4590,11 @@ def _rewrite_beats_for_cadence(
             else minimum_count <= len(candidate) <= maximum_count
         )
         if not count_is_valid or not minimum_chars <= candidate_chars <= maximum_chars:
+            continue
+        if preserve_times and any(
+            not _grounded_cadence_rewrite_is_safe(original, revised.text)
+            for original, revised in zip(beats, candidate)
+        ):
             continue
         if not preserve_times and not _beats_cover_duration(candidate, duration):
             candidate = _repair_beat_timeline(candidate, duration)
@@ -4586,7 +4768,7 @@ def analyze_video(
 8. “造犯规、打手、阻挡、2+1、投篮犯规、罚球、走步、压哨、绝杀”都属于需要额外证据的判定，不得从哨声、碰撞、观众反应、单帧画面或未确认的自由背景文字生成。只有用户在可信背景中明确写出裁判已经确认的具体判罚，才能在对应停表回合使用；否则最多只说“对抗之后，比赛停了下来”。
 9. 相邻两句至少要有约 1.2 秒的可朗读空间；事件过密时只选更重要、置信度更高的事件，不能把多个 event_id 合并成一句。每句尽量控制在 8–22 个汉字，让声音能贴住动作。
 10. 准确不等于只剩结果词。只要 event_ledger 中有可靠事件，就要在结果句之间保留必要的推进、传球、突破、出手和转换过程；实际比赛事件覆盖区间内尽量不要留下超过 4.5 秒的无解说空档。整段目标约 {beat_count} 句，允许因事件密度上下浮动 2 句。每句可以在一个确认动作后接一句不增加新事实的即时反应，让口吻像现场解说，例如“节奏提起来了”“这次处理够果断”，但不得虚构另一动作、比分、球员或判罚。相邻句式可有变化，但不得为了避免重复而把结果前的过程塞到结果句后面。
-11. 在证据充分的好动作或硬结果后加入少量场边式夸赞。传球、脚步、出手选择可以自然接“好传”“这一步漂亮”“处理得真果断”；明确命中、封盖、抢断或篮板后可以接“好球”“漂亮”“好帽”“防得真好”“保护得真稳”。全片大约每三个 beat 最多一处显性夸赞，同一个词不要连续重复，夸赞必须和动作或结果连在同一次反应里，不能单独占一个 beat。verified_detail_tags: ["contested_shot"] 只允许说“面对干扰还能收下”；只有同一投篮链经局部复核得到 verified_detail_tags: ["through_contact"]，才能说“顶着对抗打进”“这球够硬”。“关键、绝杀、压哨、高难度、无解”不能当作普通夸赞自动生成。
+11. 在证据充分的好动作或硬结果后加入少量场边式夸赞。传球、脚步、出手选择可以自然接“好传”“这一步漂亮”“处理得真果断”；明确命中、封盖、抢断或篮板后可以接“好球”“漂亮”“好帽”“防得真好”“保护得真稳”。全片大约每三个 beat 最多一处显性夸赞，裸喊的“好球”全片最多一次；再次夸赞时要换到把握、脚步、传球、防守或篮板等眼前真正成立的落点，不能只换一个同义词。连续 made_shot 的结果起手要在“有了、进了、命中、打进”之间自然轮换，任意连续四个命中不要使用相同起手，但不得为了变化新增三分、上篮、扣篮等未经验证的细节。夸赞必须和动作或结果连在同一次反应里，不能单独占一个 beat。verified_detail_tags: ["contested_shot"] 只允许说“面对干扰还能收下”；只有同一投篮链经局部复核得到 verified_detail_tags: ["through_contact"]，才能说“顶着对抗打进”“这球够硬”。“关键、绝杀、压哨、高难度、无解”不能当作普通夸赞自动生成。
 
 {planner_skill}
 
@@ -4735,6 +4917,7 @@ def analyze_video(
             grounded_events,
             duration,
         )
+        grounded_beats = _diversify_repeated_praise_words(grounded_beats)
     if grounded_events and not grounded_beats:
         raise ValueError("可确认的比赛结果离片尾太近，没有安全的朗读窗口，请保留动作后约 1 秒再上传")
     timing_is_grounded = bool(grounded_beats)
@@ -5271,7 +5454,7 @@ def _tts_instruction_for_beat(
     if re.search(r"比赛.{0,4}停|回合.{0,4}停顿|暂停|死球", text):
         moment = "这里是回合自然停下的时刻，立即把情绪收住，语速略放慢，不补充任何判罚猜测。"
     elif re.fullmatch(
-        r"(?:命中|打进|没进|未进|封盖|盖帽|抢断|篮板)[！!。]?",
+        r"(?:有了|进了|命中|打进|得分|没进|未进|封盖|盖帽|抢断|篮板)[！!。]?",
         text,
     ):
         moment = (
@@ -5694,7 +5877,12 @@ def _minimal_hard_result_text(beat: CommentaryBeat) -> str:
     if not beat.hard_anchor:
         return beat.text
     if beat.event_kind == "made_shot":
-        return "命中！" if beat.text.startswith("命中") else "打进！"
+        head_match = MADE_SHOT_RESULT_HEAD_RE.match(beat.text)
+        return (
+            head_match.group("head") + "！"
+            if head_match is not None
+            else "打进！"
+        )
     if beat.event_kind == "missed_shot":
         return "没进！"
     if beat.event_kind == "block":
@@ -5713,7 +5901,12 @@ def _compact_tight_hard_result_windows(
     duration: float,
     maximum_read_window: float = 2.2,
 ) -> list[CommentaryBeat]:
-    """Pre-shorten rich result reactions when the next anchor leaves no room."""
+    """Pre-shorten only reactions that clearly cannot fit their local window.
+
+    The previous fixed 2.2-second cutoff discarded short, natural tails before
+    TTS was measured.  Estimate the line's own reading need here; the bounded
+    synthesis repair loop still handles voices that are genuinely slower.
+    """
     revised = list(beats)
     for index, beat in enumerate(beats):
         if not beat.hard_anchor:
@@ -5725,7 +5918,11 @@ def _compact_tight_hard_result_windows(
             right_boundary = next_beat.time + allowed_next_shift - 0.06
         available = right_boundary - beat.time
         minimal = _minimal_hard_result_text(beat)
-        if available < maximum_read_window and minimal != beat.text:
+        estimated_read_window = min(
+            maximum_read_window,
+            max(1.05, _spoken_piece_length(beat.text) / 4.8 + 0.18),
+        )
+        if available < estimated_read_window and minimal != beat.text:
             revised[index] = replace(beat, text=minimal)
     return revised
 

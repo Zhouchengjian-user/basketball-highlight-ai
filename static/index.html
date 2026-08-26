@@ -3,20 +3,21 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f7f7f8" />
+    <meta name="theme-color" content="#ffffff" />
     <title>篮球高光 AI 解说</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260824-5" />
+    <link rel="stylesheet" href="./styles.css?v=20260825-7" />
   </head>
   <body>
     <main class="page-shell">
       <nav class="topbar" aria-label="产品导航">
         <a class="brand" href="/" aria-label="篮球高光 AI 解说首页">
           <span class="brand-mark" aria-hidden="true"><i></i></span>
-          <span>篮球高光</span>
-          <b>AI</b>
+          <span class="brand-word"><strong>COURTCAST</strong><small>篮球高光 AI</small></span>
         </a>
-        <div id="runtime-badge" class="local-badge checking"><span></span><b>正在检查服务</b></div>
+        <div class="topbar-actions">
+          <div id="runtime-badge" class="local-badge checking"><span></span><b>正在检查服务</b></div>
+        </div>
       </nav>
 
       <section id="runtime-alert" class="runtime-alert hidden" role="status">
@@ -39,28 +40,65 @@
       </form>
 
       <header class="intro">
-        <p class="kicker">AI BASKETBALL COMMENTARY</p>
-        <h1>给一段篮球视频，<br />生成一条有解说的高光成片</h1>
-        <p class="intro-copy">上传 3–90 秒比赛片段，AI 会先理解完整回合，再把解说落到确认的动作时间点。无需写稿、录音或剪字幕，通常 2–5 分钟即可得到保留现场声、适合分享的 MP4 成片；长片或局部二次复核可能更久。</p>
-        <div class="product-promises" aria-label="产品能力">
-          <span><i>✓</i>关键结果画面对齐</span>
-          <span><i>✓</i>真人即时反应节奏</span>
-          <span><i>✓</i>配音字幕一键完成</span>
+        <div class="intro-content">
+          <p class="kicker">YOUR GAME / YOUR VOICE</p>
+          <h1 class="hero-headline"><span>每一次上场</span><span>都值得一段<em class="hero-highlight">属于你的解说</em></span></h1>
+          <p class="intro-copy">上传一段 <strong>15 到 90 秒</strong>的篮球视频。AI 会看懂回合、听见现场，让每一次出手、突破和命中都有贴合画面的解说。配音、字幕和成片一起完成，几分钟后就能分享。</p>
+          <p class="workflow-label">四步完成你的专属转播</p>
+          <ol class="workflow" aria-label="生成流程">
+            <li><span>01</span><div><b>用户上传视频</b><small>选择 15–90 秒篮球片段</small></div></li>
+            <li><span>02</span><div><b>平台解说速览视频片段</b><small>识别回合、动作与现场声</small></div></li>
+            <li><span>03</span><div><b>AI 开始进行专业解说</b><small>生成解说、配音与字幕</small></div></li>
+            <li><span>04</span><div><b>生成成品</b><small>查看、分享或逐句矫正</small></div></li>
+          </ol>
+          <a class="hero-start-cta" href="#studio">
+            <span class="cta-ball" aria-hidden="true"><i></i></span>
+            <span class="hero-start-copy"><b>点击此处开始制作</b><small>上传视频，让 AI 完成解说与成片</small></span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
+          </a>
         </div>
-        <ol class="workflow" aria-label="生成流程">
-          <li><span>1</span>上传片段</li>
-          <li><span>2</span>理解回合</li>
-          <li><span>3</span>生成解说</li>
-          <li><span>4</span>导出成片</li>
-        </ol>
+
+        <figure class="hero-visual promo-visual" aria-label="COURTCAST 产品宣传视频区域">
+          <div class="hero-scoreboard"><span class="hero-live-status"><i></i>COURTCAST / PRODUCT FILM</span><b>VIDEO PREVIEW</b></div>
+          <div class="promo-stage">
+            <!-- 接入宣传片时：加入 source 与字幕 track，移除 video 的 hidden，并给 promo-placeholder 添加 hidden。 -->
+            <video id="product-promo-video" class="promo-video hidden" aria-label="COURTCAST 产品宣传视频" controls playsinline preload="metadata">当前浏览器不支持视频播放。</video>
+            <div class="promo-placeholder">
+              <svg class="promo-court" viewBox="0 0 420 236" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <rect width="420" height="236" fill="#181818" />
+                <g fill="none" stroke="#ffffff" stroke-width="2" opacity=".25">
+                  <path d="M0 22h124v192H0M420 22H296v192h124" />
+                  <path d="M0 70h61v96H0M420 70h-61v96h61" />
+                  <path d="M210 0v236M61 77a59 59 0 0 1 0 82M359 77a59 59 0 0 0 0 82" />
+                </g>
+                <g fill="none" stroke="#ea5b24" opacity=".36">
+                  <circle cx="210" cy="118" r="52" />
+                  <circle cx="210" cy="118" r="68" stroke-dasharray="3 9" />
+                </g>
+              </svg>
+              <span class="promo-play-button" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M9 7l8 5-8 5z" /></svg>
+              </span>
+              <div class="promo-slot-copy">
+                <strong>产品宣传片预留位</strong>
+                <small>接入宣传视频后即可播放</small>
+              </div>
+            </div>
+          </div>
+          <figcaption class="promo-slot-footer">
+            <span><b>PRODUCT VIDEO</b>宣传片预留位</span>
+            <span><b>16:9</b>支持横版视频</span>
+            <span><b>READY</b>替换视频即可</span>
+          </figcaption>
+        </figure>
       </header>
 
-      <section class="workspace">
+      <section id="studio" class="workspace">
         <form id="job-form" class="card settings-card">
           <div class="card-heading">
             <div>
-              <p class="step-label">STEP 01</p>
-              <h2>上传与设置</h2>
+              <p class="step-label">UPLOAD 01</p>
+              <h2>把比赛片段交给转播台</h2>
             </div>
             <span class="required-note">* 必填</span>
           </div>
@@ -71,13 +109,13 @@
               <svg viewBox="0 0 24 24" role="img"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
             </span>
             <strong id="file-label">点击选择或拖入篮球视频</strong>
-            <small>支持 MP4、MOV、M4V、WebM，3–90 秒，最大 300 MB</small>
+            <small>支持 MP4、MOV、M4V、WebM，15–90 秒，最大 300 MB</small>
             <span class="choose-file">选择视频</span>
           </label>
           <p id="file-validation" class="file-validation hidden" role="alert"></p>
 
           <fieldset class="form-section commentary-style-section" aria-describedby="style-description">
-            <legend>真人解说反应 <sup>*</sup></legend>
+            <legend>选择你的解说席 <sup>*</sup></legend>
             <div class="style-options">
               <label>
                 <input type="radio" name="style" value="hype" checked />
@@ -97,8 +135,8 @@
 
           <div class="form-section voice-profile-section">
             <div class="field-heading">
-              <label for="voice-profile">专属解说音色</label>
-              <span>已授权音色，支持试听</span>
+              <label for="voice-profile">选择解说音色</label>
+              <span>授权音色可试听</span>
             </div>
             <div class="voice-profile-row">
               <select id="voice-profile" name="voice_profile" aria-describedby="voice-profile-help">
@@ -116,7 +154,7 @@
 
           <div class="form-section game-info-section">
             <div class="field-heading">
-              <label>让解说叫对人、说对队名</label>
+              <label>把球员与比分写进转播</label>
               <span>全部选填</span>
             </div>
             <div class="game-info-grid">
@@ -153,22 +191,18 @@
             <div class="field-help"><span>无需写解说稿，AI 会根据画面自动组织语言</span><span id="context-count">0 / 500</span></div>
           </div>
 
-          <div class="one-click-summary">
-            <span class="one-click-icon">✓</span>
-            <div><strong>提交后自动完成</strong><p>理解回合、生成解说、真人感配音、混合现场声、制作字幕并导出成片。</p></div>
-          </div>
-
           <button id="submit-button" class="primary-button" type="submit">
-            <span>一键生成解说成片</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+            <span class="button-ball" aria-hidden="true"><i></i></span>
+            <span class="button-label">一键生成解说成片</span>
+            <svg class="button-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
           </button>
         </form>
 
         <section id="result-panel" class="card preview-card" aria-live="polite">
           <div class="card-heading preview-heading">
             <div>
-              <p class="step-label">STEP 02</p>
-              <h2>成片预览</h2>
+              <p class="step-label">YOUR HIGHLIGHT 02</p>
+              <h2>查看你的高光成品</h2>
             </div>
             <span id="preview-status" class="status-pill idle"><i></i>等待上传</span>
           </div>
@@ -183,8 +217,8 @@
                 <i class="caption-line line-one"></i>
                 <i class="caption-line line-two"></i>
               </div>
-              <h3 id="empty-title">成片会显示在这里</h3>
-              <p id="empty-description">完成左侧设置后，点击“一键生成解说成片”</p>
+              <h3 id="empty-title">你的比赛转播会出现在这里</h3>
+              <p id="empty-description">上传片段并完成赛前设置，然后点击“一键生成解说成片”</p>
             </div>
 
             <div id="progress-state" class="state progress-state hidden">
@@ -207,18 +241,23 @@
               </div>
               <div class="result-details">
                 <p class="result-eyebrow">AI 解说稿</p>
-                <h3 id="result-title">篮球高光时刻</h3>
+                <h3 id="result-title">今晚的篮球高光</h3>
                 <p id="result-commentary"></p>
                 <div id="mode-note" class="mode-note"></div>
+                <aside class="correction-guide" aria-label="矫正解说词">
+                  <span class="correction-ball" aria-hidden="true"><i></i></span>
+                  <div><strong>这版还不够满意？</strong><p>逐句修改解说词和出现时间，再重新配音生成修正版，原成片会保留。</p></div>
+                  <button id="open-correction" type="button">去矫正解说词</button>
+                </aside>
                 <section id="event-timeline" class="event-timeline hidden" aria-labelledby="event-timeline-title">
                   <div class="event-timeline-heading">
                     <div>
-                      <p class="result-eyebrow">画面校对</p>
-                      <h4 id="event-timeline-title">解说事件时间轴</h4>
+                      <p class="result-eyebrow">逐句矫正</p>
+                      <h4 id="event-timeline-title">修改解说词与出现时间</h4>
                     </div>
                     <div class="event-timeline-heading-actions">
                       <span id="event-count"></span>
-                      <button id="timeline-edit-toggle" type="button">校正</button>
+                      <button id="timeline-edit-toggle" type="button">开始矫正</button>
                     </div>
                   </div>
                   <p id="event-timeline-help" class="event-timeline-help">点击任意一句，视频会跳到对应动作。标记为“请复核”的句子建议重点检查。</p>
@@ -226,7 +265,7 @@
                   <div id="timeline-edit-actions" class="timeline-edit-actions hidden">
                     <button id="timeline-add-event" type="button">＋ 添加一句</button>
                     <button id="timeline-cancel-edit" type="button">取消</button>
-                    <button id="timeline-render-revision" class="timeline-render-revision" type="button">按校正结果重新配音</button>
+                    <button id="timeline-render-revision" class="timeline-render-revision" type="button">重新配音并生成修正版</button>
                   </div>
                   <p id="timeline-edit-status" class="timeline-edit-status hidden"></p>
                 </section>
@@ -267,14 +306,14 @@
 
       <section class="safety-note">
         <div class="safety-icon">✓</div>
-        <div><strong>音画对齐与信息保护</strong><p>命中、未进等关键结果使用画面时间锚点，解说不会提前喊结果；无法确认的动作会留白。你填写的称呼只有在人物标识能与画面对应时才会使用，配音仅使用已获合法授权的录制音色或平台系统音色。</p></div>
+        <div><strong>像转播一样热血，也像回放一样克制</strong><p>命中、未进等关键结果使用画面时间锚点，解说不会提前喊结果；无法确认的动作会留白。你填写的称呼只有在人物标识能与画面对应时才会使用，配音仅使用已获合法授权的录制音色或平台系统音色。</p></div>
       </section>
 
       <footer class="page-footer">
-        <span>篮球高光 AI 解说 · 第一版</span>
+        <span>COURTCAST · 篮球高光 AI 解说</span>
         <span>视频文件保存在当前运行设备</span>
       </footer>
     </main>
-    <script src="./app.js?v=20260824-5"></script>
+    <script src="./app.js?v=20260825-4"></script>
   </body>
 </html>

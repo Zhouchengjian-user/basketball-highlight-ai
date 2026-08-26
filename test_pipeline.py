@@ -2332,6 +2332,114 @@ def test_nearby_exact_planner_repeats_are_diversified_with_safe_event_lines():
     assert all(re.search(r"突破|往里|篮下", beat.text) for beat in diversified)
 
 
+def test_similar_made_shot_calls_rotate_heads_without_inventing_detail():
+    events = [
+        GroundedEvent(
+            event_id=f"made-variety-{index}",
+            start=1.0 + index * 2.0,
+            peak=1.5 + index * 2.0,
+            end=1.8 + index * 2.0,
+            kind="made_shot",
+            action="篮球落入篮筐",
+            result="命中",
+            confidence=0.95,
+        )
+        for index in range(6)
+    ]
+    planner_lines = (
+        "打进！好球！",
+        "打进！漂亮！",
+        "打进！这球处理得真好！",
+        "打进！干净利落！",
+        "打进！稳稳收下！",
+        "打进！好球！",
+    )
+    normalized = _normalize_grounded_beats(
+        {
+            "beats": [
+                {"event_id": event.event_id, "text": text}
+                for event, text in zip(events, planner_lines)
+            ]
+        },
+        duration=15.0,
+        events=events,
+    )
+
+    diversified = pipeline._diversify_repeated_grounded_calls(
+        normalized,
+        events,
+        duration=15.0,
+    )
+    limited = _limit_grounded_praise_density(diversified, events, duration=15.0)
+    final = pipeline._diversify_repeated_praise_words(limited)
+
+    assert [beat.event_id for beat in final] == [beat.event_id for beat in normalized]
+    assert [beat.time for beat in final] == [beat.time for beat in normalized]
+    heads = [
+        re.match(r"^(有了|进了|打进|命中)！", beat.text).group(1)
+        for beat in final
+    ]
+    assert len(set(heads)) >= 3
+    assert max(heads.count(head) for head in set(heads)) <= 2
+    assert all(len(set(heads[index : index + 4])) == 4 for index in range(3))
+    assert sum("好球" in beat.text for beat in final) <= 1
+    assert not re.search(
+        r"三分|扣篮|上篮|跳投|抛投|擦板|补篮|空(?:中接力|接)|空心|"
+        r"顶着对抗|造犯规|2\+1|绝杀|压哨",
+        "".join(beat.text for beat in final),
+    )
+
+
+@pytest.mark.parametrize("head", ["有了", "进了", "命中", "打进"])
+def test_timing_compaction_preserves_the_diversified_made_shot_head(head: str):
+    result = CommentaryBeat(
+        time=1.0,
+        text=f"{head}！这球把握得真稳！",
+        event_id=f"made-{head}",
+        event_kind="made_shot",
+        anchor_time=0.96,
+        hard_anchor=True,
+    )
+    next_beat = CommentaryBeat(
+        time=2.2,
+        text="球权重新组织。",
+        event_id="next-possession",
+        event_kind="possession",
+    )
+
+    compacted = pipeline._compact_tight_hard_result_windows(
+        [result, next_beat],
+        duration=5.0,
+    )
+
+    assert compacted[0].text == f"{head}！"
+
+
+def test_repeated_bare_good_ball_praise_is_reworded_without_moving_beats():
+    beats = [
+        CommentaryBeat(
+            time=1.0 + index * 4.0,
+            text="打进！好球！",
+            event_id=f"good-ball-{index}",
+            event_kind="made_shot",
+            anchor_time=1.0 + index * 4.0,
+            hard_anchor=True,
+        )
+        for index in range(3)
+    ]
+
+    diversified = pipeline._diversify_repeated_praise_words(beats)
+
+    assert [beat.event_id for beat in diversified] == [beat.event_id for beat in beats]
+    assert [beat.time for beat in diversified] == [beat.time for beat in beats]
+    assert sum("好球" in beat.text for beat in diversified) == 1
+    assert all(beat.text.startswith("打进！") for beat in diversified)
+    assert not re.search(
+        r"三分|扣篮|上篮|跳投|抛投|擦板|补篮|犯规|绝杀|压哨",
+        "".join(beat.text for beat in diversified),
+    )
+
+
 def test_contest_fact_is_not_mistaken_for_praise():
     event = GroundedEvent(
         "contested-fact",
@@ -3585,6 +3693,77 @@ def test_rewrite_preserves_original_times_when_model_times_are_clustered(monkeyp
     prompt = captured["payload"]["messages"][0]["content"]
     assert "按原创专业转播方式修订" in prompt
     assert "不得加入任何真人解说员姓名" in prompt
+
+
+def test_grounded_cadence_rewrite_cannot_add_a_result_or_shot_detail(monkeypatch):
+    original = [
+        CommentaryBeat(
+            1.0,
+            "抬手完成出手。",
+            event_id="shot-only",
+            event_kind="shot",
+        ),
+        CommentaryBeat(
+            4.0,
+            "命中！",
+            event_id="made-generic",
+            event_kind="made_shot",
+            hard_anchor=True,
+        ),
+    ]
+    response_body = {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "beats": [
+                                {"time": 1.0, "text": "抬手就有。"},
+                                {"time": 4.0, "text": "命中！三分稳稳落袋。"},
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                }
+            }
+        ]
+    }
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return response_body
+
+    class FakeClient:
+        def __init__(self, *_, **__):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def post(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(pipeline.httpx, "Client", FakeClient)
+
+    revised = _rewrite_beats_for_cadence(
+        original,
+        duration=7.0,
+        beat_count=2,
+        minimum_chars=6,
+        target_chars=12,
+        maximum_chars=28,
+        settings=Settings(qwen_api_key="test-key"),
+        preserve_times=True,
+    )
+
+    assert [beat.text for beat in revised] == [beat.text for beat in original]
+    assert [beat.event_id for beat in revised] == [beat.event_id for beat in original]
 
 
 def test_rewrite_repairs_clustered_candidate_times_instead_of_discarding_good_text(monkeypatch):

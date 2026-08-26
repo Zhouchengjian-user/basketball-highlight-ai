@@ -26,6 +26,12 @@ uploads/
 *.aiff
 *.m4a
 
+# README 产品演示只保留最终压缩版本
+!docs/media/courtcast-demo.mp4
+
+# 本地宣传片工程包含中间音频、截图和多版成片，不进入源码仓库
+promo/
+
 # 授权人声属于私有素材，不随源码发布
 static/voice-authorized-*.wav
 

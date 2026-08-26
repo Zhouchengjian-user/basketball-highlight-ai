@@ -46,6 +46,7 @@ const timelineCancelEdit = document.querySelector("#timeline-cancel-edit");
 const timelineRenderRevision = document.querySelector("#timeline-render-revision");
 const timelineEditStatus = document.querySelector("#timeline-edit-status");
 const eventTimelineHelp = document.querySelector("#event-timeline-help");
+const openCorrectionButton = document.querySelector("#open-correction");
 let serviceReady = false;
 let sourceObjectUrl = "";
 let activeVoicePreview = null;
@@ -61,7 +62,7 @@ let timelineEditing = false;
 let savedJobRestoreStarted = false;
 
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
-const MIN_VIDEO_DURATION = 3;
+const MIN_VIDEO_DURATION = 15;
 const MAX_VIDEO_DURATION = 90;
 const SAVED_JOB_KEY = "basketball-highlight-active-job-v1";
 
@@ -460,9 +461,9 @@ function setFile(file) {
     const duration = Number(sourcePreview.duration);
     if (!Number.isFinite(duration) || duration < MIN_VIDEO_DURATION || duration > MAX_VIDEO_DURATION) {
       const durationLabel = Number.isFinite(duration) ? `${duration.toFixed(1)} 秒` : "无法读取";
-      setFileValidation(`视频时长为 ${durationLabel}，请选择 3–90 秒的片段。`);
+      setFileValidation(`视频时长为 ${durationLabel}，请选择 15–90 秒的片段。`);
       emptyTitle.textContent = "视频时长不符合要求";
-      emptyDescription.textContent = "请截取为 3–90 秒后重新选择，当前文件不会提交。";
+      emptyDescription.textContent = "请截取为 15–90 秒后重新选择，当前文件不会提交。";
       previewDimensions.textContent = "当前片段不会提交";
       return;
     }
@@ -652,10 +653,10 @@ function renderEventTimeline(result) {
   eventTimeline.classList.toggle("hidden", !beats.length);
   if (!beats.length) return;
   eventCount.textContent = `${beats.length} 个事件`;
-  timelineEditToggle.textContent = timelineEditing ? "校正中" : "校正";
+  timelineEditToggle.textContent = timelineEditing ? "矫正中" : "开始矫正";
   timelineEditActions.classList.toggle("hidden", !timelineEditing);
   eventTimelineHelp.textContent = timelineEditing
-    ? "修改时间、事件类型或解说词。重新生成只复用现有视频分析结果，不再重复理解整段视频。"
+    ? "直接修改每句解说词、出现时间或事件类型。生成修正版时会复用现有视频分析，不必重新理解整段视频。"
     : "点击任意一句，视频会跳到对应动作。标记为“请复核”的句子建议重点检查。";
   if (!timelineEditing) {
     timelineEditStatus.classList.add("hidden");
@@ -734,7 +735,7 @@ function setTimelineEditorBusy(busy) {
   timelineAddEvent.disabled = busy;
   timelineCancelEdit.disabled = busy;
   timelineRenderRevision.disabled = busy;
-  timelineRenderRevision.textContent = busy ? "正在重新配音…" : "按校正结果重新配音";
+  timelineRenderRevision.textContent = busy ? "正在生成修正版…" : "重新配音并生成修正版";
 }
 
 function showResult(job) {
@@ -744,6 +745,9 @@ function showResult(job) {
   currentJobId = String(job.id || currentJobId || "");
   saveCurrentJob(currentJobId);
   currentJobRetryable = false;
+  const hasEditableBeats = Array.isArray(result.beats) && result.beats.length > 0;
+  openCorrectionButton.disabled = !hasEditableBeats;
+  openCorrectionButton.textContent = hasEditableBeats ? "去矫正解说词" : "暂无可矫正解说";
   document.querySelector("#result-title").textContent = result.title;
   document.querySelector("#result-commentary").textContent = result.beats?.length
     ? result.beats.map((beat) => beat.text).join(" ")
@@ -828,12 +832,24 @@ function showResult(job) {
   requestAnimationFrame(() => fitPreviewFrame(resultVideo, resultVideoWrap, 640));
 }
 
-timelineEditToggle.addEventListener("click", () => {
-  if (!currentResult || timelineEditing) return;
+function enterTimelineCorrection(shouldScroll = false) {
+  if (!currentResult || timelineEditing || !Array.isArray(currentResult.beats) || !currentResult.beats.length) return;
   timelineEditing = true;
   setTimelineStatus("");
   renderEventTimeline(currentResult);
-  eventTimelineList.querySelector(".event-editor-text")?.focus();
+  if (shouldScroll) {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    eventTimeline.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  }
+  window.requestAnimationFrame(() => eventTimelineList.querySelector(".event-editor-text")?.focus());
+}
+
+timelineEditToggle.addEventListener("click", () => {
+  enterTimelineCorrection(false);
+});
+
+openCorrectionButton.addEventListener("click", () => {
+  enterTimelineCorrection(true);
 });
 
 timelineCancelEdit.addEventListener("click", () => {
@@ -1053,7 +1069,7 @@ form.addEventListener("submit", async (event) => {
   currentJobId = "";
   currentJobRetryable = false;
   submitButton.disabled = true;
-  submitButton.querySelector("span").textContent = "正在生成，请稍候…";
+  submitButton.querySelector(".button-label").textContent = "正在生成，请稍候…";
   updateProgress({ message: "正在上传视频", progress: 1 });
   try {
     const formData = new FormData(form);
@@ -1081,7 +1097,7 @@ form.addEventListener("submit", async (event) => {
     dropZone.classList.remove("is-busy");
     form.removeAttribute("aria-busy");
     submitButton.disabled = !serviceReady || !selectedFileValid;
-    submitButton.querySelector("span").textContent = "一键生成解说成片";
+    submitButton.querySelector(".button-label").textContent = "一键生成解说成片";
   }
 });
 

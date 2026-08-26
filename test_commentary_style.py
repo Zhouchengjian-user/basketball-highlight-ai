@@ -84,6 +84,8 @@ def test_style_registry_is_fixed_and_exposes_three_stage_rules():
     assert "好球" in planner
     assert "漂亮" in planner
     assert "每三个 beat 最多有一处显性夸赞" in planner
+    assert "裸喊“好球”全片最多一次" in planner
+    assert "连续多个明确命中" in planner
     assert "现场口语动作" in planner
     assert "有了！" in planner
     assert "断下来了！" in planner
@@ -342,7 +344,9 @@ def test_praise_budget_reserves_a_slot_for_a_later_confirmed_result():
     ]
 
     hints = profile.scene_hints(events)
-    praise_terms = re.compile(r"好球|漂亮|好传|真及时|真好|真稳|扎实|果断|坚决")
+    praise_terms = re.compile(
+        r"好球|漂亮|好传|真及时|真好|真稳|扎实|果断|坚决|干净"
+    )
     praised_lines = [
         line
         for line in hints.splitlines()
