@@ -3,13 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#ffffff" />
-    <title>篮球高光 AI 解说</title>
+    <meta name="theme-color" content="#f3ead5" />
+    <title>COURTCAST · 篮球漫画 AI 解说台</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260825-7" />
+    <link rel="stylesheet" href="./styles.css?v=20260827-5" />
   </head>
   <body>
-    <main class="page-shell">
+    <a class="skip-link" href="#studio">跳到制作台</a>
+    <main id="main-content" class="page-shell">
       <nav class="topbar" aria-label="产品导航">
         <a class="brand" href="/" aria-label="篮球高光 AI 解说首页">
           <span class="brand-mark" aria-hidden="true"><i></i></span>
@@ -39,66 +40,93 @@
         <p id="ai-settings-message" class="settings-message"></p>
       </form>
 
-      <header class="intro">
+      <header class="intro" aria-labelledby="hero-title">
         <div class="intro-content">
-          <p class="kicker">YOUR GAME / YOUR VOICE</p>
-          <h1 class="hero-headline"><span>每一次上场</span><span>都值得一段<em class="hero-highlight">属于你的解说</em></span></h1>
-          <p class="intro-copy">上传一段 <strong>15 到 90 秒</strong>的篮球视频。AI 会看懂回合、听见现场，让每一次出手、突破和命中都有贴合画面的解说。配音、字幕和成片一起完成，几分钟后就能分享。</p>
-          <p class="workflow-label">四步完成你的专属转播</p>
-          <ol class="workflow" aria-label="生成流程">
-            <li><span>01</span><div><b>用户上传视频</b><small>选择 15–90 秒篮球片段</small></div></li>
-            <li><span>02</span><div><b>平台解说速览视频片段</b><small>识别回合、动作与现场声</small></div></li>
-            <li><span>03</span><div><b>AI 开始进行专业解说</b><small>生成解说、配音与字幕</small></div></li>
-            <li><span>04</span><div><b>生成成品</b><small>查看、分享或逐句矫正</small></div></li>
-          </ol>
+          <p class="kicker">MANGA PLAY-BY-PLAY</p>
+          <h1 id="hero-title" class="hero-headline"><span>每一次上场</span><span>都值得一段<em class="hero-highlight">属于你的解说</em></span></h1>
+          <p class="intro-copy">上传一段 <strong>15 到 90 秒</strong>的篮球视频。AI 会看懂回合、听见现场，让出手、突破和命中都有贴合画面的即时解说。配音、字幕和成片一起完成，几分钟后就能分享。</p>
           <a class="hero-start-cta" href="#studio">
             <span class="cta-ball" aria-hidden="true"><i></i></span>
-            <span class="hero-start-copy"><b>点击此处开始制作</b><small>上传视频，让 AI 完成解说与成片</small></span>
+            <span class="hero-start-copy"><b>开始制作我的高光</b><small>上传视频，让 AI 完成解说与成片</small></span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
           </a>
+          <div class="hero-trust" aria-label="产品能力">
+            <span>画面动作对齐</span><span>真人感节奏</span><span>支持逐句矫正</span>
+          </div>
         </div>
 
-        <figure class="hero-visual promo-visual" aria-label="COURTCAST 产品宣传视频区域">
-          <div class="hero-scoreboard"><span class="hero-live-status"><i></i>COURTCAST / PRODUCT FILM</span><b>VIDEO PREVIEW</b></div>
-          <div class="promo-stage">
-            <!-- 接入宣传片时：加入 source 与字幕 track，移除 video 的 hidden，并给 promo-placeholder 添加 hidden。 -->
-            <video id="product-promo-video" class="promo-video hidden" aria-label="COURTCAST 产品宣传视频" controls playsinline preload="metadata">当前浏览器不支持视频播放。</video>
-            <div class="promo-placeholder">
-              <svg class="promo-court" viewBox="0 0 420 236" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                <rect width="420" height="236" fill="#181818" />
-                <g fill="none" stroke="#ffffff" stroke-width="2" opacity=".25">
-                  <path d="M0 22h124v192H0M420 22H296v192h124" />
-                  <path d="M0 70h61v96H0M420 70h-61v96h61" />
-                  <path d="M210 0v236M61 77a59 59 0 0 1 0 82M359 77a59 59 0 0 0 0 82" />
-                </g>
-                <g fill="none" stroke="#ea5b24" opacity=".36">
-                  <circle cx="210" cy="118" r="52" />
-                  <circle cx="210" cy="118" r="68" stroke-dasharray="3 9" />
-                </g>
-              </svg>
-              <span class="promo-play-button" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M9 7l8 5-8 5z" /></svg>
-              </span>
-              <div class="promo-slot-copy">
-                <strong>产品宣传片预留位</strong>
-                <small>接入宣传视频后即可播放</small>
+        <figure class="hero-visual manga-booth" aria-label="COURTCAST 漫画配音工作台演示">
+          <div class="hero-scoreboard">
+            <span class="hero-live-status"><i></i>COURTCAST / LIVE BOOTH</span>
+            <b>00:18.42</b>
+          </div>
+          <div class="broadcast-console manga-broadcast-console">
+            <div class="broadcast-feed">
+              <div class="feed-toolbar">
+                <span><i></i>视频片段 / 回合 07</span>
+                <b>AI 正在看球</b>
+              </div>
+              <div class="feed-frame promo-feed-frame">
+                <video id="product-promo-video" class="promo-video" src="/product-demo.mp4" poster="/product-demo-cover.jpg" aria-label="COURTCAST 产品宣传视频" muted loop playsinline preload="metadata">
+                  <track kind="captions" src="/product-demo-captions.vtt?v=20260827-2" srclang="zh-CN" label="中文" default />
+                  当前浏览器不支持视频播放。
+                </video>
+                <div class="comic-video-scrim" aria-hidden="true"></div>
+                <svg class="comic-shot-path" viewBox="0 0 420 236" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M76 176 C154 62 268 38 355 88" />
+                  <circle cx="76" cy="176" r="6" />
+                </svg>
+                <span class="vision-scan" aria-hidden="true"></span>
+                <span class="vision-box vision-player" aria-hidden="true"><b>持球人</b></span>
+                <span class="vision-box vision-rim" aria-hidden="true"><b>篮筐</b></span>
+                <span class="comic-sfx" aria-hidden="true">唰！</span>
+                <span class="feed-result"><i></i>动作锁定 <strong>三分命中</strong></span>
+                <button id="promo-play-toggle" class="promo-play-button" type="button" aria-label="从头播放有声产品宣传片">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7l8 5-8 5z" /></svg>
+                  <span>看完整演示</span>
+                </button>
+              </div>
+              <div class="commentary-track">
+                <div class="track-header"><span>AI 解说声轨</span><b><i></i>生成中</b></div>
+                <p>接球就投，出手非常果断——<strong>漂亮！三分命中！</strong></p>
+                <div class="voice-wave" aria-hidden="true">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                  <span class="track-playhead"></span>
+                </div>
               </div>
             </div>
+            <aside class="analysis-stack" aria-label="AI 处理步骤">
+              <p>AI PIPELINE</p>
+              <div><span>01</span><b>理解画面</b><small>球员 · 篮筐 · 球路</small></div>
+              <div><span>02</span><b>组织解说</b><small>专业术语与比赛节奏</small></div>
+              <div><span>03</span><b>合成成片</b><small>配音 · 字幕 · 现场声</small></div>
+            </aside>
           </div>
-          <figcaption class="promo-slot-footer">
-            <span><b>PRODUCT VIDEO</b>宣传片预留位</span>
-            <span><b>16:9</b>支持横版视频</span>
-            <span><b>READY</b>替换视频即可</span>
+          <span class="comic-finish-stamp" aria-hidden="true">成片<br />完成</span>
+          <figcaption>
+            <span><b>画面理解</b>回合锁定</span>
+            <span><b>解说生成</b>专业转播</span>
+            <span><b>成片进度</b>92%</span>
           </figcaption>
         </figure>
+
+        <div class="workflow-wrap">
+          <p class="workflow-label">像翻开一页漫画，四步完成你的专属转播</p>
+          <ol class="workflow" aria-label="生成流程">
+            <li><span>01</span><div><b>用户上传视频</b><small>选择 15–90 秒篮球片段</small></div></li>
+            <li><span>02</span><div><b>AI 速览比赛片段</b><small>识别回合、动作与现场声</small></div></li>
+            <li><span>03</span><div><b>生成专业解说</b><small>组织解说、配音与字幕</small></div></li>
+            <li><span>04</span><div><b>查看高光成片</b><small>分享，或进入逐句矫正</small></div></li>
+          </ol>
+        </div>
       </header>
 
       <section id="studio" class="workspace">
         <form id="job-form" class="card settings-card">
           <div class="card-heading">
-            <div>
-              <p class="step-label">UPLOAD 01</p>
+            <div class="card-title-lockup">
               <h2>把比赛片段交给转播台</h2>
+              <span class="panel-number" aria-hidden="true">01</span>
             </div>
             <span class="required-note">* 必填</span>
           </div>
@@ -154,7 +182,7 @@
 
           <div class="form-section game-info-section">
             <div class="field-heading">
-              <label>把球员与比分写进转播</label>
+              <span class="field-label">把球员与比分写进转播</span>
               <span>全部选填</span>
             </div>
             <div class="game-info-grid">
@@ -198,13 +226,13 @@
           </button>
         </form>
 
-        <section id="result-panel" class="card preview-card" aria-live="polite">
+        <section id="result-panel" class="card preview-card">
           <div class="card-heading preview-heading">
-            <div>
-              <p class="step-label">YOUR HIGHLIGHT 02</p>
+            <div class="card-title-lockup">
               <h2>查看你的高光成品</h2>
+              <span class="panel-number" aria-hidden="true">02</span>
             </div>
-            <span id="preview-status" class="status-pill idle"><i></i>等待上传</span>
+            <span id="preview-status" class="status-pill idle" role="status" aria-live="polite" aria-atomic="true"><i></i>等待上传</span>
           </div>
 
           <div class="preview-stage">
@@ -223,9 +251,9 @@
 
             <div id="progress-state" class="state progress-state hidden">
               <div class="progress-ring"><span id="progress-percent">0%</span></div>
-              <h3 id="progress-message">正在准备视频</h3>
+              <h3 id="progress-message" role="status" aria-live="polite" aria-atomic="true">正在准备视频</h3>
               <p id="progress-meta">预计 2–5 分钟 · 已用时 00:00</p>
-              <div class="progress-track"><span id="progress-bar"></span></div>
+              <div class="progress-track" role="progressbar" aria-label="成片生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="正在准备视频，0%"><span id="progress-bar"></span></div>
               <ol id="generation-stages" class="generation-stages" aria-label="生成阶段">
                 <li data-stage="upload"><i></i><span>读取视频</span></li>
                 <li data-stage="analysis"><i></i><span>理解回合</span></li>
@@ -314,6 +342,6 @@
         <span>视频文件保存在当前运行设备</span>
       </footer>
     </main>
-    <script src="./app.js?v=20260825-4"></script>
+    <script src="./app.js?v=20260827-3"></script>
   </body>
 </html>

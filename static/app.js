@@ -5,6 +5,7 @@ const dropZone = document.querySelector("#drop-zone");
 const fileValidation = document.querySelector("#file-validation");
 const submitButton = document.querySelector("#submit-button");
 const previewStatus = document.querySelector("#preview-status");
+const progressTrack = document.querySelector(".progress-track");
 const contextInput = document.querySelector("#context");
 const contextCount = document.querySelector("#context-count");
 const voiceProfile = document.querySelector("#voice-profile");
@@ -47,6 +48,10 @@ const timelineRenderRevision = document.querySelector("#timeline-render-revision
 const timelineEditStatus = document.querySelector("#timeline-edit-status");
 const eventTimelineHelp = document.querySelector("#event-timeline-help");
 const openCorrectionButton = document.querySelector("#open-correction");
+const promoVideo = document.querySelector("#product-promo-video");
+const promoPlayToggle = document.querySelector("#promo-play-toggle");
+const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+const finePointerQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
 let serviceReady = false;
 let sourceObjectUrl = "";
 let activeVoicePreview = null;
@@ -558,9 +563,12 @@ voiceProfile.addEventListener("change", () => {
 function updateProgress(job) {
   const progress = Math.max(0, Math.min(100, Number(job.progress) || 0));
   const message = String(job.message || "正在准备视频");
+  const roundedProgress = Math.round(progress);
   document.querySelector("#progress-message").textContent = message;
-  document.querySelector("#progress-percent").textContent = `${Math.round(progress)}%`;
+  document.querySelector("#progress-percent").textContent = `${roundedProgress}%`;
   document.querySelector("#progress-bar").style.width = `${progress}%`;
+  progressTrack?.setAttribute("aria-valuenow", String(roundedProgress));
+  progressTrack?.setAttribute("aria-valuetext", `${message}，${roundedProgress}%`);
   const explicitStage = { upload: 0, analysis: 1, voice: 2, render: 3 }[job.stage];
   let activeStage = Number.isInteger(explicitStage)
     ? explicitStage
@@ -1182,3 +1190,59 @@ window.addEventListener("resize", () => {
   fitPreviewFrame(sourcePreview, sourcePreviewWrap, 380);
   fitPreviewFrame(resultVideo, resultVideoWrap, 640);
 });
+
+document.documentElement.classList.toggle("fine-pointer", finePointerQuery.matches);
+
+if (promoVideo && promoPlayToggle) {
+  const promoFrame = promoVideo.closest(".promo-feed-frame");
+  const promoBooth = promoVideo.closest(".manga-booth");
+
+  const setAmbientPromoMotion = (reduceMotion) => {
+    promoVideo.controls = false;
+    promoVideo.muted = true;
+    promoVideo.loop = true;
+    promoVideo.currentTime = 0;
+    promoFrame?.classList.remove("is-playing");
+    promoBooth?.classList.remove("promo-is-playing");
+    promoPlayToggle.disabled = false;
+    promoPlayToggle.removeAttribute("aria-hidden");
+
+    if (reduceMotion) {
+      promoVideo.pause();
+      return;
+    }
+
+    promoVideo.play().catch(() => {
+      // The visible play control remains the fallback when autoplay is blocked.
+    });
+  };
+
+  setAmbientPromoMotion(reducedMotionQuery.matches);
+
+  promoPlayToggle.addEventListener("click", async () => {
+    promoVideo.loop = false;
+    promoVideo.controls = true;
+    promoVideo.muted = false;
+    promoVideo.currentTime = 0;
+    promoFrame?.classList.add("is-playing");
+    promoBooth?.classList.add("promo-is-playing");
+    promoPlayToggle.disabled = true;
+    promoPlayToggle.setAttribute("aria-hidden", "true");
+    try {
+      await promoVideo.play();
+      promoVideo.focus({ preventScroll: true });
+    } catch (_error) {
+      setAmbientPromoMotion(reducedMotionQuery.matches);
+      promoPlayToggle.focus({ preventScroll: true });
+    }
+  });
+
+  promoVideo.addEventListener("ended", () => {
+    setAmbientPromoMotion(reducedMotionQuery.matches);
+    promoPlayToggle.focus({ preventScroll: true });
+  });
+
+  reducedMotionQuery.addEventListener("change", (event) => {
+    setAmbientPromoMotion(event.matches);
+  });
+}
