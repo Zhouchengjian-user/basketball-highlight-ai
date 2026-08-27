@@ -42,6 +42,7 @@ from voice_profiles import (
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / ".data"
 STATIC_DIR = ROOT / "static"
+DEMO_MEDIA_DIR = ROOT / "docs" / "media"
 DATA_DIR.mkdir(exist_ok=True)
 
 ALLOWED_SUFFIXES = {".mp4", ".mov", ".m4v", ".webm"}
@@ -534,6 +535,25 @@ def frontend_script() -> FileResponse:
 @app.get("/favicon.svg", include_in_schema=False)
 def favicon() -> FileResponse:
     return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
+
+
+@app.get("/product-demo.mp4", include_in_schema=False)
+def product_demo_video() -> FileResponse:
+    return FileResponse(DEMO_MEDIA_DIR / "courtcast-demo.mp4", media_type="video/mp4")
+
+
+@app.get("/product-demo-cover.jpg", include_in_schema=False)
+def product_demo_cover() -> FileResponse:
+    return FileResponse(DEMO_MEDIA_DIR / "courtcast-demo-cover.jpg", media_type="image/jpeg")
+
+
+@app.get("/product-demo-captions.vtt", include_in_schema=False)
+def product_demo_captions() -> FileResponse:
+    return FileResponse(
+        DEMO_MEDIA_DIR / "courtcast-demo.zh-CN.vtt",
+        media_type="text/vtt",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @app.get("/health")
