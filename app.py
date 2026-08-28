@@ -896,6 +896,26 @@ def revise_job(job_id: str, payload: CommentaryRevisionRequest) -> dict:
     return response
 
 
+@app.get("/api/jobs/latest")
+def get_latest_completed_job() -> dict:
+    """Restore the latest local result when browser storage was cleared."""
+    with jobs_lock:
+        completed_jobs: list[tuple[int, str, dict]] = []
+        for job_id, job in jobs.items():
+            if job.get("status") != "completed" or not isinstance(job.get("result"), dict):
+                continue
+            state_path = DATA_DIR / job_id / JOB_STATE_FILENAME
+            try:
+                modified_at = state_path.stat().st_mtime_ns
+            except OSError:
+                modified_at = 0
+            completed_jobs.append((modified_at, job_id, job))
+        if not completed_jobs:
+            raise HTTPException(404, "没有可恢复的已完成任务")
+        _, _, latest_job = max(completed_jobs, key=lambda item: (item[0], item[1]))
+        return dict(latest_job)
+
+
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str) -> dict:
     with jobs_lock:

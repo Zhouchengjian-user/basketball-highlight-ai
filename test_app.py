@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import subprocess
 
 from fastapi.testclient import TestClient
@@ -20,7 +21,203 @@ def test_home_and_relative_assets_are_served():
     assert "声音克隆" not in home.text
     assert client.get("/styles.css").status_code == 200
     assert client.get("/app.js").status_code == 200
+    assert client.get("/static/timeline-utils.js").status_code == 200
     assert client.get("/favicon.svg").status_code == 200
+
+
+def test_current_product_demo_assets_are_served():
+    home = client.get("/")
+    styles = client.get("/styles.css").text
+    script = client.get("/app.js").text
+    assert 'src="/product-demo.mp4?v=20260828-1"' in home.text
+    assert 'poster="/product-demo-cover.jpg?v=20260828-1"' in home.text
+    assert 'src="/product-demo-captions.vtt?v=20260828-1"' in home.text
+    assert 'id="product-promo-backdrop"' in home.text
+    assert ".promo-video-backdrop" in styles
+    assert "object-fit: cover" in styles
+    assert ".manga-booth.promo-is-playing .feed-toolbar" in styles
+    assert ".manga-booth.promo-is-playing .hero-scoreboard" in styles
+    assert ".manga-booth.promo-is-playing > figcaption" in styles
+    assert "syncPromoBackdrop" in script
+
+    video = client.get("/product-demo.mp4")
+    cover = client.get("/product-demo-cover.jpg")
+    captions = client.get("/product-demo-captions.vtt")
+
+    assert video.status_code == 200
+    assert video.headers["content-type"].startswith("video/mp4")
+    assert len(video.content) > 100_000
+    assert cover.status_code == 200
+    assert cover.headers["content-type"].startswith("image/jpeg")
+    assert len(cover.content) > 10_000
+    assert captions.status_code == 200
+    assert captions.headers["content-type"].startswith("text/vtt")
+    assert captions.text.startswith("WEBVTT")
+
+
+def test_review_workbench_is_click_driven_and_supports_middle_insertion():
+    home = client.get("/").text
+    script = client.get("/app.js").text
+    styles = client.get("/styles.css").text
+
+    promo_tag = home.split('id="product-promo-video"', 1)[1].split(">", 1)[0]
+    assert " autoplay" not in promo_tag
+    assert " loop" not in promo_tag
+    assert 'class="result-player-pane"' in home
+    assert '<span class="panel-number" aria-hidden="true">01</span>' in home
+    assert '<span class="panel-number" aria-hidden="true">02</span>' in home
+    assert '<span class="panel-number" aria-hidden="true">03</span>' in home
+    assert 'id="result-details" class="result-details" role="region"' in home
+    assert 'aria-labelledby="script-pane-title" tabindex="0"' in home
+    assert 'id="script-pane-title">解说词</h2>' in home
+    assert 'id="review-playhead-time"' in home
+    assert 'id="review-nav-studio"' in home
+    assert 'id="review-nav-video"' in home
+    assert 'id="review-nav-script"' in home
+    assert 'id="review-scroll-cue"' in home
+    assert 'id="job-form" class="card settings-card" novalidate' in home
+    assert 'id="settings-scroll-body"' in home
+    assert 'id="settings-scroll-cue"' in home
+    assert 'id="submit-feedback"' in home
+    assert "继续下滑填写完整信息" in home
+    assert 'id="mode-note"' not in home
+    assert "＋ 在当前画面补一句" in home
+    assert "qwen3.5-omni-flash" not in home
+    assert "setPromoIdleState" in script
+    assert "scrollReviewToTimeline" in script
+    assert "updateReviewScrollCue" in script
+    assert 'document.querySelector("#mode-note")' not in script
+    assert "insertEventEditorRow" in script
+    assert "createEventInsertionControl" in script
+    assert "＋ 开头补一句" in script
+    assert "＋ 这里补一句" in script
+    assert "＋ 结尾补一句" in script
+    assert "两句太近，先调时间" in script
+    assert "row.append(previewButton, timeControl, kindSelect, textInput, removeButton)" in script
+    assert "[...result.beats].sort" in script
+    assert "timelineEditorBusy = busy" in script
+    assert 'const revisionProgress = name === "progress" && Boolean(currentResult)' in script
+    assert 'const visibleState = revisionProgress ? "completed" : name' in script
+    assert 'workspace.classList.toggle("is-correcting", timelineEditing)' in script
+    assert 'timelineEditToggle.textContent = timelineEditing ? "修改中" : "直接修改"' in script
+    assert "syncSubmitAvailability" in script
+    availability = script.split("function syncSubmitAvailability()", 1)[1].split("}", 1)[0]
+    assert "!selectedFileValid" not in availability
+    assert 'form.getAttribute("aria-busy") === "true"' in availability
+    assert 'setRuntimeBadge("", "服务已连接")' in script
+    assert '服务已连接 · ${system.ai_model}' not in script
+    assert "showSubmitFeedback" in script
+    assert "updateSettingsScrollCue" in script
+    assert 'querySelectorAll(".event-editor-row input, .event-editor-row select, .event-editor-row button")' in script
+    assert 'id="resume-result"' in home
+    assert "compact 01 / 02 / 03 same-screen review desk" in styles
+    assert "--review-side: clamp(360px, 27vw, 410px)" in styles
+    assert "grid-template-columns: var(--review-side) minmax(0, 1fr)" in styles
+    assert "grid-template-columns: minmax(0, 1fr) var(--review-side)" in styles
+    assert ".workspace-review-mode .settings-scroll-body" in styles
+    assert ".settings-scroll-cue" in styles
+    assert '"play time kind copy remove" 44px' in styles
+    assert "grid-area: play" in styles
+    assert "grid-area: time" in styles
+    assert "grid-area: kind" in styles
+    assert "grid-area: copy" in styles
+    assert "grid-area: remove" in styles
+    assert ".workspace-review-mode.is-correcting .event-timeline" in styles
+    assert ".workspace-review-mode .result-details::-webkit-scrollbar" in styles
+
+
+def test_latest_completed_job_restores_when_browser_storage_is_empty(tmp_path: Path, monkeypatch):
+    older = {
+        "id": "older-result",
+        "status": "completed",
+        "result": {"title": "旧成片", "beats": [{"time": 1.0, "text": "好球"}]},
+    }
+    latest = {
+        "id": "latest-result",
+        "status": "completed",
+        "result": {"title": "最新成片", "beats": [{"time": 2.0, "text": "漂亮"}]},
+    }
+    monkeypatch.setattr(app_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(app_module, "jobs", {"older-result": older, "latest-result": latest})
+    older_state = tmp_path / "older-result" / app_module.JOB_STATE_FILENAME
+    latest_state = tmp_path / "latest-result" / app_module.JOB_STATE_FILENAME
+    older_state.parent.mkdir()
+    latest_state.parent.mkdir()
+    older_state.write_text("{}", encoding="utf-8")
+    latest_state.write_text("{}", encoding="utf-8")
+    os.utime(older_state, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(latest_state, ns=(2_000_000_000, 2_000_000_000))
+
+    response = client.get("/api/jobs/latest")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "latest-result"
+
+
+def test_frontend_falls_back_to_latest_completed_job_without_saved_id():
+    script = client.get("/app.js").text
+
+    assert 'const restoreUrl = savedJobId ? `/api/jobs/${savedJobId}` : "/api/jobs/latest";' in script
+    assert "if (currentJobId) saveCurrentJob(currentJobId);" in script
+
+
+def test_timeline_editor_time_stepper_seeks_preview_live():
+    script = client.get("/app.js").text
+    styles = client.get("/styles.css").text
+
+    assert 'timeControl.className = "event-editor-time-control"' in script
+    assert 'timeStepper.className = "event-editor-time-stepper"' in script
+    assert 'increaseButton.textContent = "▲"' in script
+    assert 'decreaseButton.textContent = "▼"' in script
+    assert 'timeToggleLabel.textContent = "调时间"' not in script
+    assert "setEventTimeControlOpen" not in script
+    assert "closeOtherEventTimeControls" not in script
+    assert 'aria-label", "减少 0.1 秒"' in script
+    assert 'aria-label", "增加 0.1 秒"' in script
+    assert "timeStepper.append(increaseButton, decreaseButton)" in script
+    assert "timeControl.append(timeInput, timeStepper)" in script
+    assert "adjustEventTime(-1)" in script
+    assert "adjustEventTime(1)" in script
+    assert "timeInput.stepDown()" in script
+    assert "timeInput.stepUp()" in script
+
+    input_handler = script.split(
+        'timeInput.addEventListener("input"', 1
+    )[1].split('timeInput.addEventListener("change"', 1)[0]
+    assert 'seekResultVideo(timeInput.value, { autoplay: false, lead: 0 })' in input_handler
+    assert ".event-editor-time-control" in styles
+    assert ".event-editor-time-stepper" in styles
+    assert ".event-editor-time-control.is-saved" in styles
+    assert ".event-editor-time-step" in styles
+    assert "grid-template-columns: minmax(0, 1fr) 24px" in styles
+    assert '"play time kind copy remove" 44px /' in styles
+    assert "44px 72px 60px minmax(114px, 1fr) 44px" in styles
+    assert ".event-editor-time-control > .event-editor-time" in styles
+    assert "grid-area: 1 / 1;" in styles
+    assert ".event-editor-time-control > .event-editor-time-stepper" in styles
+    assert "grid-area: 1 / 2;" in styles
+    assert 'event-editor-time-control[aria-busy="true"]' in styles
+
+
+def test_timeline_tick_math_rejects_duplicate_and_out_of_range_insertions():
+    node_script = """
+      const assert = require('node:assert/strict');
+      const timeline = require('./static/timeline-utils.js');
+      assert.equal(timeline.findInsertionTime({ previous: 0.1, next: 0.2, duration: 8 }), null);
+      assert.equal(timeline.findInsertionTime({ previous: 0.1, next: 0.3, duration: 8 }), 0.2);
+      assert.equal(timeline.findInsertionTime({ previous: 7.9, next: null, duration: 8 }), null);
+      assert.equal(timeline.validateTimes([0.1, 0.2, 0.2], 8).ok, false);
+      assert.equal(timeline.validateTimes([0.1, 7.95], 8).ok, false);
+      assert.deepEqual(timeline.validateTimes([0.1, 0.2, 7.9], 8).normalized, [0.1, 0.2, 7.9]);
+    """
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=Path(__file__).parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_system_status_explains_runtime_mode(monkeypatch):
