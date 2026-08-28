@@ -4,6 +4,9 @@ const fileLabel = document.querySelector("#file-label");
 const dropZone = document.querySelector("#drop-zone");
 const fileValidation = document.querySelector("#file-validation");
 const submitButton = document.querySelector("#submit-button");
+const submitFeedback = document.querySelector("#submit-feedback");
+const settingsScrollBody = document.querySelector("#settings-scroll-body");
+const settingsScrollCue = document.querySelector("#settings-scroll-cue");
 const previewStatus = document.querySelector("#preview-status");
 const progressTrack = document.querySelector(".progress-track");
 const contextInput = document.querySelector("#context");
@@ -30,6 +33,13 @@ const emptyDescription = document.querySelector("#empty-description");
 const previewDimensions = document.querySelector("#preview-dimensions");
 const resultVideo = document.querySelector("#result-video");
 const resultVideoWrap = resultVideo.closest(".video-wrap");
+const resultDetails = document.querySelector("#result-details");
+const workspace = document.querySelector("#studio");
+const reviewPlayheadTime = document.querySelector("#review-playhead-time");
+const reviewNavStudio = document.querySelector("#review-nav-studio");
+const reviewNavVideo = document.querySelector("#review-nav-video");
+const reviewNavScript = document.querySelector("#review-nav-script");
+const reviewScrollCue = document.querySelector("#review-scroll-cue");
 const progressMeta = document.querySelector("#progress-meta");
 const generationStages = [...document.querySelectorAll("#generation-stages li")];
 const styleDescription = document.querySelector("#style-description");
@@ -48,10 +58,14 @@ const timelineRenderRevision = document.querySelector("#timeline-render-revision
 const timelineEditStatus = document.querySelector("#timeline-edit-status");
 const eventTimelineHelp = document.querySelector("#event-timeline-help");
 const openCorrectionButton = document.querySelector("#open-correction");
+const returnToSetupButton = document.querySelector("#return-to-setup");
+const resumeResultButton = document.querySelector("#resume-result");
 const promoVideo = document.querySelector("#product-promo-video");
+const promoBackdrop = document.querySelector("#product-promo-backdrop");
 const promoPlayToggle = document.querySelector("#promo-play-toggle");
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const finePointerQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
+const timelineMath = window.CourtCastTimeline;
 let serviceReady = false;
 let sourceObjectUrl = "";
 let activeVoicePreview = null;
@@ -64,6 +78,7 @@ let currentJobId = "";
 let currentJobRetryable = false;
 let currentResult = null;
 let timelineEditing = false;
+let timelineEditorBusy = false;
 let savedJobRestoreStarted = false;
 
 const MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
@@ -167,7 +182,48 @@ function setFileValidation(message = "") {
     previewStatus.className = "status-pill idle";
     previewStatus.innerHTML = "<i></i>片段已校验";
   }
-  submitButton.disabled = !serviceReady || Boolean(message);
+  syncSubmitAvailability();
+}
+
+function syncSubmitAvailability() {
+  submitButton.disabled = !serviceReady
+    || timelineEditorBusy
+    || form.getAttribute("aria-busy") === "true";
+}
+
+function updateSettingsScrollCue() {
+  const reviewVisible = workspace.classList.contains("workspace-review-mode") && window.innerWidth >= 901;
+  const remaining = settingsScrollBody.scrollHeight
+    - settingsScrollBody.scrollTop
+    - settingsScrollBody.clientHeight;
+  const shouldShow = reviewVisible
+    && settingsScrollBody.scrollHeight > settingsScrollBody.clientHeight + 8
+    && remaining > 24;
+  settingsScrollCue.classList.toggle("hidden", !shouldShow);
+  settingsScrollCue.disabled = !shouldShow;
+  settingsScrollCue.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+}
+
+function scrollSettingsForward() {
+  const behavior = reducedMotionQuery.matches ? "auto" : "smooth";
+  settingsScrollBody.scrollBy({
+    top: Math.max(220, settingsScrollBody.clientHeight * 0.68),
+    behavior,
+  });
+  window.requestAnimationFrame(updateSettingsScrollCue);
+}
+
+function showSubmitFeedback(message = "", isError = false) {
+  submitFeedback.textContent = message;
+  submitFeedback.classList.toggle("error", Boolean(message) && isError);
+  if (!message) return;
+  const behavior = reducedMotionQuery.matches ? "auto" : "smooth";
+  if (settingsScrollBody.scrollHeight > settingsScrollBody.clientHeight + 8) {
+    settingsScrollBody.scrollTo({ top: settingsScrollBody.scrollHeight, behavior });
+  } else {
+    submitFeedback.scrollIntoView({ behavior, block: "nearest" });
+  }
+  window.requestAnimationFrame(updateSettingsScrollCue);
 }
 
 function supportsFileSharing() {
@@ -323,7 +379,7 @@ async function checkRuntime() {
     if (!response.ok) throw new Error(`服务返回 ${response.status}`);
     const system = await response.json();
     serviceReady = Boolean(system.ready);
-    submitButton.disabled = !serviceReady || Boolean(fileValidation.textContent);
+    syncSubmitAvailability();
     renderVoiceProfiles(system);
 
     if (!system.ready) {
@@ -336,7 +392,7 @@ async function checkRuntime() {
       showRuntimeAlert("", "当前是演示模式", "上传、配音、字幕和视频合成功能可以正常使用，但不会分析真实篮球动作。点击右侧“配置 AI”填写 QWEN_API_KEY 后，才会启用画面解说。");
       openAiSettings.classList.remove("hidden");
     } else {
-      setRuntimeBadge("", `服务已连接 · ${system.ai_model}`);
+      setRuntimeBadge("", "服务已连接");
       runtimeAlert.className = "runtime-alert hidden";
       openAiSettings.classList.add("hidden");
       aiSettingsPanel.classList.add("hidden");
@@ -353,7 +409,13 @@ async function checkRuntime() {
 
 function showState(name) {
   if (name !== "progress") stopProgressClock();
-  Object.entries(states).forEach(([key, element]) => element.classList.toggle("hidden", key !== name));
+  const revisionProgress = name === "progress" && Boolean(currentResult);
+  const visibleState = revisionProgress ? "completed" : name;
+  Object.entries(states).forEach(([key, element]) => element.classList.toggle("hidden", key !== visibleState));
+  const keepReviewLayout = visibleState === "completed";
+  workspace.classList.toggle("workspace-review-mode", keepReviewLayout);
+  workspace.classList.toggle("workspace-revision-progress", revisionProgress);
+  workspace.dataset.state = revisionProgress ? "revision-progress" : name;
   const emptyLabel = fileValidation.textContent
     ? ["failed", "片段不可用"]
     : selectedFileValid
@@ -371,9 +433,75 @@ function showState(name) {
   previewStatus.className = `status-pill ${className}`;
   previewStatus.innerHTML = `<i></i>${text}`;
   requestAnimationFrame(() => {
-    if (name === "empty") fitPreviewFrame(sourcePreview, sourcePreviewWrap, 380);
-    if (name === "completed") fitPreviewFrame(resultVideo, resultVideoWrap, 640);
+    if (visibleState === "empty") fitPreviewFrame(sourcePreview, sourcePreviewWrap, 380);
+    if (visibleState === "completed") fitPreviewFrame(resultVideo, resultVideoWrap, 640);
+    updateReviewViewportNavigation();
+    updateSettingsScrollCue();
   });
+}
+
+function setReviewNavActive(target) {
+  [
+    [reviewNavVideo, target === "video"],
+    [reviewNavScript, target === "script"],
+  ].forEach(([button, active]) => {
+    button.classList.toggle("is-active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+}
+
+function scrollReviewToVideo() {
+  const behavior = reducedMotionQuery.matches ? "auto" : "smooth";
+  if (window.innerWidth > 900) {
+    resultDetails.scrollTo({ top: 0, behavior });
+  } else {
+    resultVideo.closest(".result-player-pane")?.scrollIntoView({ behavior, block: "start" });
+  }
+  setReviewNavActive("video");
+}
+
+function scrollReviewToTimeline({ focus = false } = {}) {
+  if (eventTimeline.classList.contains("hidden")) return;
+  const behavior = reducedMotionQuery.matches ? "auto" : "smooth";
+  if (window.innerWidth > 900) {
+    const detailsRect = resultDetails.getBoundingClientRect();
+    const timelineRect = eventTimeline.getBoundingClientRect();
+    const top = resultDetails.scrollTop + timelineRect.top - detailsRect.top - 78;
+    resultDetails.scrollTo({ top: Math.max(0, top), behavior });
+  } else {
+    eventTimeline.scrollIntoView({ behavior, block: "start" });
+  }
+  setReviewNavActive("script");
+  if (focus) {
+    window.requestAnimationFrame(() => timelineEditToggle.focus({ preventScroll: true }));
+  }
+}
+
+function updateReviewScrollCue() {
+  const resultVisible = !states.completed.classList.contains("hidden");
+  const timelineVisible = !eventTimeline.classList.contains("hidden");
+  let shouldShow = false;
+  if (resultVisible && timelineVisible && !timelineEditing) {
+    if (window.innerWidth > 900) {
+      const remainingScroll = resultDetails.scrollHeight - resultDetails.scrollTop - resultDetails.clientHeight;
+      shouldShow = remainingScroll > 96;
+    } else {
+      const remainingScroll = document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+      shouldShow = remainingScroll > 120;
+    }
+  }
+  reviewScrollCue.classList.toggle("hidden", !shouldShow);
+}
+
+function updateReviewViewportNavigation() {
+  updateReviewScrollCue();
+  if (states.completed.classList.contains("hidden") || eventTimeline.classList.contains("hidden") || timelineEditing) return;
+  const timelineRect = eventTimeline.getBoundingClientRect();
+  const threshold = window.innerWidth > 900
+    ? resultDetails.getBoundingClientRect().top + 104
+    : window.innerHeight * 0.56;
+  setReviewNavActive(timelineRect.top <= threshold ? "script" : "video");
 }
 
 function saveCurrentJob(jobId) {
@@ -412,7 +540,10 @@ function fitPreviewFrame(video, frame, maxHeight) {
     180,
     parent.clientWidth - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0),
   );
-  const heightLimit = Math.min(maxHeight, Math.max(280, window.innerHeight * 0.64));
+  const reviewPaneLimit = frame === resultVideoWrap && window.innerWidth <= 900
+    ? Math.max(180, window.innerHeight * 0.31)
+    : maxHeight;
+  const heightLimit = Math.min(reviewPaneLimit, Math.max(180, window.innerHeight * 0.64));
   const renderedWidth = Math.min(availableWidth, heightLimit * (width / height));
   frame.style.width = `${renderedWidth}px`;
   frame.style.aspectRatio = `${width} / ${height}`;
@@ -429,6 +560,7 @@ function setSourceMetadata(width, height) {
 
 function setFile(file) {
   if (!file) return;
+  showSubmitFeedback("");
   fileLabel.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} MB`;
   dropZone.querySelector(".choose-file").textContent = "重新选择";
   sourcePreview.onloadedmetadata = null;
@@ -595,13 +727,40 @@ function formatEventTime(value) {
   return `${String(minutes).padStart(2, "0")}:${remainder.toFixed(1).padStart(4, "0")}`;
 }
 
-function jumpToEvent(time) {
+function seekResultVideo(time, { autoplay = true, lead = 0.35 } = {}) {
+  const target = Math.max(0, Number(time) - Math.max(0, Number(lead) || 0));
   try {
-    resultVideo.currentTime = Math.max(0, Number(time) - 0.35);
+    if (!autoplay) resultVideo.pause();
+    resultVideo.currentTime = target;
   } catch (_error) {
     return;
   }
-  resultVideo.play().catch(() => {});
+  updateReviewPlayhead();
+  if (autoplay) resultVideo.play().catch(() => {});
+}
+
+function jumpToEvent(time) {
+  seekResultVideo(time, { autoplay: true, lead: 0.35 });
+}
+
+function syncEventTimeControlState(timeControl) {
+  const timeInput = timeControl?.querySelector(".event-editor-time");
+  const decreaseButton = timeControl?.querySelector(".event-editor-time-decrease");
+  const increaseButton = timeControl?.querySelector(".event-editor-time-increase");
+  if (!timeInput || !decreaseButton || !increaseButton) return;
+
+  const value = Number(timeInput.value);
+  const minimum = Number(timeInput.min);
+  const maximum = Number(timeInput.max);
+  const hasValue = timeInput.value.trim() !== "" && Number.isFinite(value);
+  const disabled = timelineEditorBusy || timeInput.disabled;
+  timeInput.setAttribute("aria-label", hasValue
+    ? `解说出现时间 ${value.toFixed(1)} 秒`
+    : "解说出现时间（秒）");
+  decreaseButton.disabled = disabled || !hasValue || value <= minimum + Number.EPSILON;
+  increaseButton.disabled = disabled || !hasValue || value >= maximum - Number.EPSILON;
+  timeControl.classList.toggle("is-disabled", disabled);
+  timeControl.setAttribute("aria-busy", String(timelineEditorBusy));
 }
 
 function createEventEditorRow(beat = {}) {
@@ -614,9 +773,116 @@ function createEventEditorRow(beat = {}) {
   timeInput.min = "0.1";
   timeInput.max = String(Math.max(0.2, Number(currentResult?.duration) - 0.1));
   timeInput.step = "0.1";
-  timeInput.value = Math.max(0.1, Number(beat.time) || 0.1).toFixed(1);
+  timeInput.value = timelineMath.clampTime(
+    beat.time,
+    Number(currentResult?.duration) || Number(resultVideo.duration) || 1,
+  ).toFixed(1);
   timeInput.setAttribute("aria-label", "解说出现时间（秒）");
-  timeInput.addEventListener("change", () => jumpToEvent(timeInput.value));
+  timeInput.setAttribute("inputmode", "decimal");
+  timeInput.setAttribute("aria-describedby", "timeline-edit-status");
+  row.dataset.time = timeInput.value;
+  timeInput.disabled = timelineEditorBusy;
+
+  const timeControl = document.createElement("div");
+  timeControl.className = "event-editor-time-control";
+  timeControl.setAttribute("role", "group");
+  timeControl.setAttribute("aria-label", "微调解说出现时间");
+
+  const timeStepper = document.createElement("span");
+  timeStepper.className = "event-editor-time-stepper";
+  timeStepper.setAttribute("aria-hidden", "false");
+
+  const decreaseButton = document.createElement("button");
+  decreaseButton.className = "event-editor-time-step event-editor-time-decrease";
+  decreaseButton.type = "button";
+  decreaseButton.textContent = "▼";
+  decreaseButton.title = "提前 0.1 秒";
+  decreaseButton.setAttribute("aria-label", "减少 0.1 秒");
+
+  const increaseButton = document.createElement("button");
+  increaseButton.className = "event-editor-time-step event-editor-time-increase";
+  increaseButton.type = "button";
+  increaseButton.textContent = "▲";
+  increaseButton.title = "延后 0.1 秒";
+  increaseButton.setAttribute("aria-label", "增加 0.1 秒");
+
+  const adjustEventTime = (direction) => {
+    if (timeInput.disabled) return;
+    if (!timeInput.value.trim()) timeInput.value = row.dataset.time;
+    try {
+      if (direction < 0) timeInput.stepDown();
+      else timeInput.stepUp();
+    } catch (_error) {
+      return;
+    }
+    timeInput.dispatchEvent(new Event("input", { bubbles: true }));
+    timeInput.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  decreaseButton.addEventListener("click", () => adjustEventTime(-1));
+  increaseButton.addEventListener("click", () => adjustEventTime(1));
+  timeStepper.append(increaseButton, decreaseButton);
+  timeControl.append(timeInput, timeStepper);
+
+  const previewButton = document.createElement("button");
+  previewButton.className = "event-editor-preview";
+  previewButton.type = "button";
+  previewButton.textContent = "▶";
+  previewButton.title = "从这句对应的画面开始预览";
+  previewButton.setAttribute("aria-label", "预览这句对应的画面");
+  previewButton.disabled = timelineEditorBusy;
+  previewButton.addEventListener("click", () => {
+    seekResultVideo(timeInput.value, { autoplay: true, lead: 0.35 });
+  });
+
+  timeInput.addEventListener("focus", () => {
+    seekResultVideo(timeInput.value, { autoplay: false, lead: 0 });
+  });
+
+  timeInput.addEventListener("input", () => {
+    syncEventTimeControlState(timeControl);
+    const value = Number(timeInput.value);
+    const minimum = Number(timeInput.min);
+    const maximum = Number(timeInput.max);
+    const valid = timeInput.value.trim() !== ""
+      && Number.isFinite(value)
+      && value >= minimum
+      && value <= maximum;
+    if (!valid) return;
+    timeInput.removeAttribute("aria-invalid");
+    seekResultVideo(timeInput.value, { autoplay: false, lead: 0 });
+  });
+
+  timeInput.addEventListener("change", () => {
+    const rows = getEventEditorRows();
+    const values = rows.map((candidate) => (
+      candidate === row
+        ? timeInput.value
+        : candidate.querySelector(".event-editor-time")?.value
+    ));
+    const validation = timelineMath.validateTimes(
+      values,
+      Number(currentResult?.duration) || Number(resultVideo.duration) || 1,
+    );
+    if (!validation.ok) {
+      timeInput.setAttribute("aria-invalid", "true");
+      timeInput.value = row.dataset.time;
+      setTimelineStatus(validation.message, true);
+      seekResultVideo(row.dataset.time, { autoplay: false, lead: 0 });
+      syncEventTimeControlState(timeControl);
+      return;
+    }
+    const normalizedTime = validation.normalized[rows.indexOf(row)];
+    timeInput.value = normalizedTime.toFixed(1);
+    row.dataset.time = timeInput.value;
+    timeInput.removeAttribute("aria-invalid");
+    setTimelineStatus("");
+    seekResultVideo(normalizedTime, { autoplay: false, lead: 0 });
+    syncEventTimeControlState(timeControl);
+    timeControl.classList.add("is-saved");
+    window.setTimeout(() => timeControl.classList.remove("is-saved"), 650);
+    sortEventEditorRows();
+  });
 
   const kindSelect = document.createElement("select");
   kindSelect.className = "event-editor-kind";
@@ -628,6 +894,7 @@ function createEventEditorRow(beat = {}) {
     kindSelect.append(option);
   });
   kindSelect.value = EVENT_KIND_LABELS[beat.event_kind] ? beat.event_kind : "other";
+  kindSelect.disabled = timelineEditorBusy;
 
   const textInput = document.createElement("input");
   textInput.className = "event-editor-text";
@@ -635,9 +902,19 @@ function createEventEditorRow(beat = {}) {
   textInput.maxLength = 80;
   textInput.value = String(beat.text || EVENT_KIND_DEFAULT_TEXT[kindSelect.value]);
   textInput.setAttribute("aria-label", "这句解说词");
+  textInput.disabled = timelineEditorBusy;
+  textInput.addEventListener("focus", () => {
+    seekResultVideo(timeInput.value, { autoplay: false, lead: 0 });
+  });
 
+  let previousKind = kindSelect.value;
   kindSelect.addEventListener("change", () => {
-    textInput.value = EVENT_KIND_DEFAULT_TEXT[kindSelect.value] || "继续看这个回合。";
+    const previousDefault = EVENT_KIND_DEFAULT_TEXT[previousKind] || "继续看这个回合。";
+    const nextDefault = EVENT_KIND_DEFAULT_TEXT[kindSelect.value] || "继续看这个回合。";
+    if (!textInput.value.trim() || textInput.value.trim() === previousDefault) {
+      textInput.value = nextDefault;
+    }
+    previousKind = kindSelect.value;
   });
 
   const removeButton = document.createElement("button");
@@ -646,25 +923,191 @@ function createEventEditorRow(beat = {}) {
   removeButton.textContent = "×";
   removeButton.title = "删除这句解说";
   removeButton.setAttribute("aria-label", "删除这句解说");
+  removeButton.disabled = timelineEditorBusy;
   removeButton.addEventListener("click", () => {
     row.remove();
-    eventCount.textContent = `${eventTimelineList.children.length} 个事件`;
+    refreshEventInsertionControls();
+    updateEventCount();
   });
 
-  row.append(timeInput, kindSelect, textInput, removeButton);
+  row.append(previewButton, timeControl, kindSelect, textInput, removeButton);
+  syncEventTimeControlState(timeControl);
   return row;
 }
 
+function getEventEditorRows() {
+  return [...eventTimelineList.querySelectorAll(".event-editor-row")];
+}
+
+function getEditorRowTime(row) {
+  const value = row?.querySelector(".event-editor-time")?.value;
+  const tick = timelineMath.toTick(value);
+  return tick === null ? Number.NaN : tick / timelineMath.TICKS_PER_SECOND;
+}
+
+function updateEventCount() {
+  const count = timelineEditing
+    ? getEventEditorRows().length
+    : eventTimelineList.querySelectorAll(".event-row").length;
+  eventCount.textContent = `${count} 个事件`;
+}
+
+function suggestedInsertionTime(index) {
+  const rows = getEventEditorRows();
+  const duration = Number(currentResult?.duration) || Number(resultVideo.duration) || 1;
+  const previous = index > 0 ? getEditorRowTime(rows[index - 1]) : null;
+  const next = index < rows.length ? getEditorRowTime(rows[index]) : null;
+  return timelineMath.findInsertionTime({
+    previous: Number.isFinite(previous) ? previous : null,
+    next: Number.isFinite(next) ? next : null,
+    duration,
+    fallback: Number.isFinite(resultVideo.currentTime) ? resultVideo.currentTime : duration / 2,
+  });
+}
+
+function createEventInsertionControl(index) {
+  const slot = document.createElement("div");
+  slot.className = "event-insert-slot";
+  const button = document.createElement("button");
+  const rows = getEventEditorRows();
+  const suggestion = suggestedInsertionTime(index);
+  const limitReached = rows.length >= 32;
+  const positionLabel = index === 0
+    ? "＋ 开头补一句"
+    : index === rows.length
+      ? "＋ 结尾补一句"
+      : "＋ 这里补一句";
+  const unavailableLabel = index === 0
+    ? "第一句已经贴近开头"
+    : index === rows.length
+      ? "最后一句已经贴近结尾"
+      : "两句太近，先调时间";
+  button.type = "button";
+  button.className = "event-insert-button";
+  button.textContent = limitReached
+    ? "已经有 32 句了"
+    : suggestion === null
+      ? unavailableLabel
+      : positionLabel;
+  button.disabled = timelineEditorBusy || limitReached || suggestion === null;
+  button.title = suggestion === null
+    ? "先调整前后解说的出现时间，再从这里补一句"
+    : positionLabel.replace("＋ ", "");
+  button.setAttribute("aria-label", `${positionLabel.replace("＋ ", "")}，第 ${index + 1} 个位置`);
+  button.addEventListener("click", () => {
+    if (suggestion !== null) insertEventEditorRow(index, suggestion);
+  });
+  slot.append(button);
+  return slot;
+}
+
+function refreshEventInsertionControls() {
+  eventTimelineList.querySelectorAll(".event-insert-slot").forEach((slot) => slot.remove());
+  if (!timelineEditing) return;
+  const rows = getEventEditorRows();
+  timelineAddEvent.disabled = timelineEditorBusy || rows.length >= 32;
+  rows.forEach((row, index) => {
+    eventTimelineList.insertBefore(createEventInsertionControl(index), row);
+  });
+  eventTimelineList.append(createEventInsertionControl(rows.length));
+}
+
+function sortEventEditorRows() {
+  const rows = getEventEditorRows().sort((left, right) => {
+    const leftTime = getEditorRowTime(left);
+    const rightTime = getEditorRowTime(right);
+    return (Number.isFinite(leftTime) ? leftTime : Number.POSITIVE_INFINITY)
+      - (Number.isFinite(rightTime) ? rightTime : Number.POSITIVE_INFINITY);
+  });
+  rows.forEach((row) => eventTimelineList.append(row));
+  refreshEventInsertionControls();
+  updateEventCount();
+}
+
+function insertEventEditorRow(index, preferredTime) {
+  const rows = getEventEditorRows();
+  if (rows.length >= 32) {
+    setTimelineStatus("一段视频最多保留 32 句解说。", true);
+    return null;
+  }
+  const duration = Number(currentResult?.duration) || Number(resultVideo.duration) || 1;
+  if (preferredTime === null || preferredTime === undefined) {
+    setTimelineStatus("这里暂时放不下新解说，请先调整前后两句的出现时间。", true);
+    return null;
+  }
+  const time = timelineMath.clampTime(preferredTime, duration);
+  const validation = timelineMath.validateTimes(
+    [...rows.map((row) => row.querySelector(".event-editor-time")?.value), time],
+    duration,
+  );
+  if (!validation.ok) {
+    setTimelineStatus(validation.message, true);
+    return null;
+  }
+  const row = createEventEditorRow({
+    time,
+    event_kind: "other",
+    text: EVENT_KIND_DEFAULT_TEXT.other,
+  });
+  eventTimelineList.insertBefore(row, rows[index] || null);
+  sortEventEditorRows();
+  setTimelineStatus(`已在 ${formatEventTime(time)} 加入一句，写下这段画面的解说吧。`, false);
+  row.querySelector(".event-editor-text")?.focus();
+  return row;
+}
+
+function updateActiveTimelineCue() {
+  const rows = timelineEditing
+    ? getEventEditorRows()
+    : [...eventTimelineList.querySelectorAll(".event-row")];
+  if (!rows.length) return;
+  const playhead = Math.max(0, Number(resultVideo.currentTime) || 0);
+  let activeRow = null;
+  let activeTime = Number.NEGATIVE_INFINITY;
+  rows.forEach((row) => {
+    const time = timelineEditing ? getEditorRowTime(row) : Number(row.dataset.time);
+    if (Number.isFinite(time) && time <= playhead + 0.35 && time >= activeTime) {
+      activeRow = row;
+      activeTime = time;
+    }
+  });
+  rows.forEach((row) => row.classList.toggle("is-active", row === activeRow));
+}
+
+function updateReviewPlayhead() {
+  const time = Math.max(0, Number(resultVideo.currentTime) || 0);
+  if (reviewPlayheadTime) reviewPlayheadTime.textContent = formatEventTime(time);
+  if (timelineEditing && timelineAddEvent) {
+    timelineAddEvent.textContent = `＋ 在当前画面 ${formatEventTime(time)} 补一句`;
+  }
+  updateActiveTimelineCue();
+}
+
 function renderEventTimeline(result) {
-  const beats = Array.isArray(result?.beats) ? result.beats : [];
+  const beats = Array.isArray(result?.beats)
+    ? [...result.beats].sort((left, right) => {
+      const leftTime = Number(left?.time);
+      const rightTime = Number(right?.time);
+      return (Number.isFinite(leftTime) ? leftTime : Number.POSITIVE_INFINITY)
+        - (Number.isFinite(rightTime) ? rightTime : Number.POSITIVE_INFINITY);
+    })
+    : [];
+  workspace.classList.toggle("is-correcting", timelineEditing);
+  reviewNavStudio.disabled = timelineEditing;
+  reviewNavStudio.title = timelineEditing ? "请先取消或提交当前修改" : "返回转播台调整设置";
+  reviewNavScript.disabled = !beats.length;
   eventTimelineList.replaceChildren();
   eventTimeline.classList.toggle("hidden", !beats.length);
-  if (!beats.length) return;
+  if (!beats.length) {
+    window.requestAnimationFrame(updateReviewScrollCue);
+    return;
+  }
   eventCount.textContent = `${beats.length} 个事件`;
-  timelineEditToggle.textContent = timelineEditing ? "矫正中" : "开始矫正";
+  timelineEditToggle.textContent = timelineEditing ? "修改中" : "直接修改";
+  timelineEditToggle.disabled = timelineEditing || timelineEditorBusy;
   timelineEditActions.classList.toggle("hidden", !timelineEditing);
   eventTimelineHelp.textContent = timelineEditing
-    ? "直接修改每句解说词、出现时间或事件类型。生成修正版时会复用现有视频分析，不必重新理解整段视频。"
+    ? "想补哪一句，就点前后解说之间的“这里补一句”；也可以播放到目标画面后，从底部按当前画面补充。生成修正版时会复用现有视频分析。"
     : "点击任意一句，视频会跳到对应动作。标记为“请复核”的句子建议重点检查。";
   if (!timelineEditing) {
     timelineEditStatus.classList.add("hidden");
@@ -708,6 +1151,11 @@ function renderEventTimeline(result) {
     row.addEventListener("click", () => jumpToEvent(time));
     eventTimelineList.append(row);
   });
+  if (timelineEditing) refreshEventInsertionControls();
+  updateEventCount();
+  updateReviewPlayhead();
+  syncSubmitAvailability();
+  window.requestAnimationFrame(updateReviewScrollCue);
 }
 
 function setTimelineStatus(message = "", isError = false) {
@@ -721,34 +1169,47 @@ function collectTimelineRevision() {
   if (!rows.length) throw new Error("至少保留一句与画面对应的解说。");
   if (rows.length > 32) throw new Error("一段视频最多保留 32 句解说。");
   const duration = Number(currentResult?.duration) || Number(resultVideo.duration) || 0;
-  return rows.map((row, index) => {
-    const time = Number(row.querySelector(".event-editor-time")?.value);
+  const timeValidation = timelineMath.validateTimes(
+    rows.map((row) => row.querySelector(".event-editor-time")?.value),
+    duration,
+  );
+  if (!timeValidation.ok) throw new Error(timeValidation.message);
+  const beats = rows.map((row, index) => {
+    const time = timeValidation.normalized[index];
     const eventKind = String(row.querySelector(".event-editor-kind")?.value || "");
     const commentary = String(row.querySelector(".event-editor-text")?.value || "").trim();
-    if (!Number.isFinite(time) || time < 0.08 || (duration > 0 && time >= duration)) {
-      throw new Error(`第 ${index + 1} 个事件时间需要在视频时长内。`);
-    }
     if (!EVENT_KIND_LABELS[eventKind]) {
       throw new Error(`第 ${index + 1} 个事件类型不正确。`);
     }
     if (!commentary || commentary.length > 80) {
       throw new Error(`第 ${index + 1} 句解说需要 1–80 个字。`);
     }
-    return { time: Math.round(time * 10) / 10, event_kind: eventKind, text: commentary };
+    return { time, event_kind: eventKind, text: commentary };
   });
+  return beats.sort((left, right) => left.time - right.time);
 }
 
 function setTimelineEditorBusy(busy) {
-  timelineEditToggle.disabled = busy;
-  timelineAddEvent.disabled = busy;
+  timelineEditorBusy = busy;
+  timelineEditToggle.disabled = busy || timelineEditing;
   timelineCancelEdit.disabled = busy;
   timelineRenderRevision.disabled = busy;
+  refreshEventInsertionControls();
+  eventTimelineList.querySelectorAll(".event-editor-row input, .event-editor-row select, .event-editor-row button").forEach((control) => {
+    control.disabled = busy;
+  });
+  eventTimelineList.querySelectorAll(".event-editor-time-control").forEach((control) => {
+    syncEventTimeControlState(control);
+  });
+  timelineAddEvent.disabled = busy || getEventEditorRows().length >= 32;
   timelineRenderRevision.textContent = busy ? "正在生成修正版…" : "重新配音并生成修正版";
+  syncSubmitAvailability();
 }
 
 function showResult(job) {
   const result = job.result;
   currentResult = result;
+  resumeResultButton.classList.add("hidden");
   timelineEditing = false;
   currentJobId = String(job.id || currentJobId || "");
   saveCurrentJob(currentJobId);
@@ -781,59 +1242,11 @@ function showResult(job) {
   currentDownloadUrl = job.download_url;
   shareButton.querySelector("span").textContent = supportsFileSharing() ? "分享成片" : "另存成片";
   shareButton.disabled = false;
-  const note = document.querySelector("#mode-note");
-  const eventGrounded = result.alignment_mode === "event_grounded";
-  const coverageNote = eventGrounded
-    ? ` · 非比赛画面和无可靠事件处保留现场声，不强行填词`
-    : Number.isFinite(result.max_silence_gap)
-      ? ` · 最长自然停连 ${result.max_silence_gap.toFixed(2)} 秒`
-      : "";
-  const syncNote = result.audio_sync_mode === "per_beat"
-    ? eventGrounded
-      ? ` · ${result.grounded_event_count || 0} 个视频事件已锁定，${result.hard_anchor_count || 0} 个结果使用不可提前锚点`
-      : ` · ${result.aligned_beat_count || result.beats?.length || 1}/${result.beats?.length || 1} 句按动作时间轴合成`
-    : "";
-  const deliveryNote = eventGrounded
-    ? " · 逐事件独立对齐配音"
-    : Number.isFinite(result.delivery_group_count)
-      ? ` · 合并为 ${result.delivery_group_count} 组连续语气配音`
-      : "";
-  const selectedVoiceLabel = voiceProfile.selectedOptions[0]?.dataset.label;
-  const backendVoiceLabel = String(
-    result.voice_profile_label || job.voice_profile_label || "",
-  ).trim();
-  const resultVoiceLabel = backendVoiceLabel === "授权音色 1"
-    ? AUTHORIZED_VOICE_LABEL
-    : backendVoiceLabel || selectedVoiceLabel || "系统默认音色（AI 合成）";
-  const analysisLabel = String(result.mode || "").startsWith("qwen_omni")
-    ? result.analysis_audio_used
-      ? result.mode === "qwen_omni_partial"
-        ? "Qwen3.5-Omni 分段音画分析（个别区间已安全跳过）"
-        : "Qwen3.5-Omni 音画联合分析"
-      : "Qwen3.5-Omni 画面分析（原片无可用音轨）"
-    : result.mode === "qwen_frames"
-      ? "关键画面分析（Omni 已自动降级）"
-      : "Qwen 关键画面分析";
-  const skillNote = result.commentary_skill
-    ? ` · ${result.commentary_skill}`
-    : "";
-  const commentaryProfileNote = result.commentary_profile_label
-    ? ` · ${result.commentary_profile_label}`
-    : "";
-  const subtitleNote = result.subtitle_mode === "burned"
-    ? "字幕已烧录"
-    : result.subtitle_mode === "soft" || hasPlayerSubtitles
-      ? "播放器字幕"
-      : "字幕状态未返回";
-  const revisionNote = Number(result.revision_count) > 0
-    ? ` · 已应用第 ${result.revision_count} 次人工时间轴校正`
-    : "";
-  note.textContent = result.mode === "demo"
-    ? "当前未配置 QWEN_API_KEY，成片使用安全的演示口播。配置密钥后会根据视频画面生成真实解说。"
-    : `${analysisLabel}${skillNote}${commentaryProfileNote} · ${result.beats?.length || 1} 段逐球解说${syncNote}${deliveryNote}${coverageNote}${revisionNote} · 解说音色：${resultVoiceLabel} · ${subtitleNote}`;
   if (result.width && result.height) {
     previewDimensions.textContent = `原片与成片均为 ${result.width} × ${result.height} · 未裁切`;
   }
+  resultDetails.scrollTop = 0;
+  setReviewNavActive("video");
   showState("completed");
   resultVideo.onloadedmetadata = () => fitPreviewFrame(resultVideo, resultVideoWrap, 640);
   resultVideo.load();
@@ -845,10 +1258,8 @@ function enterTimelineCorrection(shouldScroll = false) {
   timelineEditing = true;
   setTimelineStatus("");
   renderEventTimeline(currentResult);
-  if (shouldScroll) {
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    eventTimeline.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-  }
+  setReviewNavActive("script");
+  if (shouldScroll) scrollReviewToTimeline();
   window.requestAnimationFrame(() => eventTimelineList.querySelector(".event-editor-text")?.focus());
 }
 
@@ -860,6 +1271,20 @@ openCorrectionButton.addEventListener("click", () => {
   enterTimelineCorrection(true);
 });
 
+reviewNavVideo.addEventListener("click", scrollReviewToVideo);
+reviewNavScript.addEventListener("click", () => scrollReviewToTimeline({ focus: true }));
+reviewScrollCue.addEventListener("click", () => scrollReviewToTimeline({ focus: true }));
+settingsScrollCue.addEventListener("click", scrollSettingsForward);
+settingsScrollBody.addEventListener("scroll", updateSettingsScrollCue, { passive: true });
+resultDetails.addEventListener("scroll", updateReviewViewportNavigation, { passive: true });
+window.addEventListener("scroll", updateReviewViewportNavigation, { passive: true });
+window.addEventListener("resize", updateReviewViewportNavigation, { passive: true });
+window.addEventListener("resize", updateSettingsScrollCue, { passive: true });
+
+resultVideo.addEventListener("timeupdate", updateReviewPlayhead);
+resultVideo.addEventListener("seeked", updateReviewPlayhead);
+resultVideo.addEventListener("loadedmetadata", updateReviewPlayhead);
+
 timelineCancelEdit.addEventListener("click", () => {
   if (!currentResult) return;
   timelineEditing = false;
@@ -868,26 +1293,26 @@ timelineCancelEdit.addEventListener("click", () => {
 });
 
 timelineAddEvent.addEventListener("click", () => {
-  const count = eventTimelineList.querySelectorAll(".event-editor-row").length;
-  if (count >= 32) {
-    setTimelineStatus("一段视频最多保留 32 句解说。", true);
-    return;
-  }
   const duration = Number(currentResult?.duration) || Number(resultVideo.duration) || 1;
   const currentTime = Number(resultVideo.currentTime);
-  const time = Math.min(
-    Math.max(0.1, Number.isFinite(currentTime) && currentTime > 0 ? currentTime : duration / 2),
-    Math.max(0.1, duration - 0.1),
+  const time = timelineMath.clampTime(
+    Number.isFinite(currentTime) ? currentTime : duration / 2,
+    duration,
   );
-  const row = createEventEditorRow({
-    time,
-    event_kind: "other",
-    text: EVENT_KIND_DEFAULT_TEXT.other,
-  });
-  eventTimelineList.append(row);
-  eventCount.textContent = `${eventTimelineList.children.length} 个事件`;
-  setTimelineStatus("已添加一句，请调整时间、事件类型和解说词。", false);
-  row.querySelector(".event-editor-text")?.focus();
+  const rows = getEventEditorRows();
+  const validation = timelineMath.validateTimes(
+    [...rows.map((row) => row.querySelector(".event-editor-time")?.value), time],
+    duration,
+  );
+  if (!validation.ok) {
+    setTimelineStatus(
+      "当前画面已有一句解说，请移动播放头，或使用两句之间的插入按钮。",
+      true,
+    );
+    return;
+  }
+  const insertIndex = rows.findIndex((row) => getEditorRowTime(row) > time);
+  insertEventEditorRow(insertIndex === -1 ? rows.length : insertIndex, time);
 });
 
 async function pollRevision(jobId) {
@@ -933,6 +1358,7 @@ timelineRenderRevision.addEventListener("click", async () => {
     if (!response.ok) throw new Error(body.detail || "无法提交校正结果");
     startProgressClock();
     showState("progress");
+    setTimelineStatus("AI 正在按新稿重新配音，画面与当前解说词会保留在这里。", false);
     updateProgress(body);
     await pollRevision(currentJobId);
   } catch (error) {
@@ -1005,16 +1431,17 @@ async function restoreSavedJob() {
   if (savedJobRestoreStarted) return;
   savedJobRestoreStarted = true;
   const savedJobId = readSavedJob();
-  if (!savedJobId) return;
   try {
-    const response = await fetch(`/api/jobs/${savedJobId}`, { cache: "no-store" });
+    const restoreUrl = savedJobId ? `/api/jobs/${savedJobId}` : "/api/jobs/latest";
+    const response = await fetch(restoreUrl, { cache: "no-store" });
     if (response.status === 404) {
-      clearSavedJob();
+      if (savedJobId) clearSavedJob();
       return;
     }
     if (!response.ok) throw new Error("无法恢复上次任务");
     const job = await response.json();
-    currentJobId = String(job.id || savedJobId);
+    currentJobId = String(job.id || savedJobId || "");
+    if (currentJobId) saveCurrentJob(currentJobId);
     currentJobRetryable = Boolean(job.retryable);
     if (job.status === "completed") {
       showResult(job);
@@ -1062,15 +1489,28 @@ async function pollJob(jobId) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!serviceReady) {
-    document.querySelector("#error-message").textContent = "后台服务没有准备好。请使用“启动篮球高光.command”打开本项目。";
-    showState("error");
+    showSubmitFeedback("后台服务没有准备好，请先重新启动服务。", true);
     return;
   }
-  if (!fileInput.files[0]) return fileInput.click();
+  if (timelineEditing) {
+    showSubmitFeedback("请先提交或取消右侧的逐句修改，再开始新的成片。", true);
+    scrollReviewToTimeline({ focus: true });
+    return;
+  }
+  if (!fileInput.files[0]) {
+    showSubmitFeedback("再次生成需要重新选择原视频，正在为你打开文件选择器。", true);
+    fileInput.click();
+    return;
+  }
   if (!selectedFileValid) {
-    setFileValidation(fileValidation.textContent || "正在读取视频时长，请稍后再试。");
+    const message = fileValidation.textContent || "正在读取视频信息，请稍后再试。";
+    setFileValidation(message);
+    showSubmitFeedback(message, true);
     return;
   }
+  showSubmitFeedback("设置已确认，正在上传视频并生成成片。", false);
+  resumeResultButton.classList.add("hidden");
+  currentResult = null;
   startProgressClock();
   showState("progress");
   clearSavedJob();
@@ -1097,6 +1537,7 @@ form.addEventListener("submit", async (event) => {
     saveCurrentJob(currentJobId);
     await pollJob(body.id);
   } catch (error) {
+    showSubmitFeedback(error.message || "生成失败，请检查后重试。", true);
     document.querySelector("#error-message").textContent = error.message || "未知错误";
     retryButton.classList.toggle("hidden", !currentJobId || !currentJobRetryable);
     showState("error");
@@ -1104,7 +1545,7 @@ form.addEventListener("submit", async (event) => {
     fileInput.disabled = false;
     dropZone.classList.remove("is-busy");
     form.removeAttribute("aria-busy");
-    submitButton.disabled = !serviceReady || !selectedFileValid;
+    syncSubmitAvailability();
     submitButton.querySelector(".button-label").textContent = "一键生成解说成片";
   }
 });
@@ -1137,9 +1578,33 @@ resetButton.addEventListener("click", () => {
   currentJobRetryable = false;
   currentResult = null;
   timelineEditing = false;
+  resumeResultButton.classList.add("hidden");
   clearSavedJob();
   retryButton.classList.add("hidden");
   showState("empty");
+});
+
+function returnToStudioSetup() {
+  resultVideo.pause();
+  timelineEditing = false;
+  setTimelineStatus("");
+  resumeResultButton.classList.toggle("hidden", !currentResult);
+  showState("empty");
+  const behavior = reducedMotionQuery.matches ? "auto" : "smooth";
+  workspace.scrollIntoView({ behavior, block: "start" });
+}
+
+returnToSetupButton.addEventListener("click", returnToStudioSetup);
+reviewNavStudio.addEventListener("click", returnToStudioSetup);
+
+resumeResultButton.addEventListener("click", () => {
+  if (!currentResult) return;
+  timelineEditing = false;
+  resumeResultButton.classList.add("hidden");
+  setTimelineStatus("");
+  renderEventTimeline(currentResult);
+  showState("completed");
+  window.requestAnimationFrame(() => fitPreviewFrame(resultVideo, resultVideoWrap, 640));
 });
 
 openAiSettings.addEventListener("click", () => {
@@ -1197,52 +1662,80 @@ if (promoVideo && promoPlayToggle) {
   const promoFrame = promoVideo.closest(".promo-feed-frame");
   const promoBooth = promoVideo.closest(".manga-booth");
 
-  const setAmbientPromoMotion = (reduceMotion) => {
+  const syncPromoBackdrop = ({ force = false } = {}) => {
+    if (!promoBackdrop || !Number.isFinite(promoVideo.currentTime)) return;
+    const drift = Math.abs(promoBackdrop.currentTime - promoVideo.currentTime);
+    if (force || drift > 0.18) {
+      try {
+        promoBackdrop.currentTime = promoVideo.currentTime;
+      } catch (_error) {
+        // Metadata may still be loading; the next timeupdate will retry.
+      }
+    }
+    promoBackdrop.playbackRate = promoVideo.playbackRate;
+  };
+
+  const setPromoIdleState = () => {
+    promoVideo.pause();
+    promoBackdrop?.pause();
     promoVideo.controls = false;
     promoVideo.muted = true;
-    promoVideo.loop = true;
+    promoVideo.loop = false;
     promoVideo.currentTime = 0;
+    if (promoBackdrop) {
+      promoBackdrop.muted = true;
+      promoBackdrop.loop = false;
+      try {
+        promoBackdrop.currentTime = 0;
+      } catch (_error) {
+        // Keep the static poster until metadata becomes available.
+      }
+    }
     promoFrame?.classList.remove("is-playing");
     promoBooth?.classList.remove("promo-is-playing");
     promoPlayToggle.disabled = false;
     promoPlayToggle.removeAttribute("aria-hidden");
-
-    if (reduceMotion) {
-      promoVideo.pause();
-      return;
-    }
-
-    promoVideo.play().catch(() => {
-      // The visible play control remains the fallback when autoplay is blocked.
-    });
   };
 
-  setAmbientPromoMotion(reducedMotionQuery.matches);
+  setPromoIdleState();
 
   promoPlayToggle.addEventListener("click", async () => {
     promoVideo.loop = false;
     promoVideo.controls = true;
     promoVideo.muted = false;
     promoVideo.currentTime = 0;
+    syncPromoBackdrop({ force: true });
     promoFrame?.classList.add("is-playing");
     promoBooth?.classList.add("promo-is-playing");
     promoPlayToggle.disabled = true;
     promoPlayToggle.setAttribute("aria-hidden", "true");
     try {
+      promoBackdrop?.play().catch(() => {});
       await promoVideo.play();
       promoVideo.focus({ preventScroll: true });
     } catch (_error) {
-      setAmbientPromoMotion(reducedMotionQuery.matches);
+      setPromoIdleState();
       promoPlayToggle.focus({ preventScroll: true });
     }
   });
 
   promoVideo.addEventListener("ended", () => {
-    setAmbientPromoMotion(reducedMotionQuery.matches);
+    setPromoIdleState();
     promoPlayToggle.focus({ preventScroll: true });
   });
 
+  promoVideo.addEventListener("play", () => {
+    syncPromoBackdrop({ force: true });
+    promoBackdrop?.play().catch(() => {});
+  });
+  promoVideo.addEventListener("pause", () => promoBackdrop?.pause());
+  promoVideo.addEventListener("seeking", () => syncPromoBackdrop({ force: true }));
+  promoVideo.addEventListener("timeupdate", () => syncPromoBackdrop());
+  promoVideo.addEventListener("ratechange", () => syncPromoBackdrop({ force: true }));
+
   reducedMotionQuery.addEventListener("change", (event) => {
-    setAmbientPromoMotion(event.matches);
+    if (event.matches) {
+      setPromoIdleState();
+    }
   });
 }

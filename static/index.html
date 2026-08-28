@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#f3ead5" />
     <title>COURTCAST · 篮球漫画 AI 解说台</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?v=20260827-5" />
+    <link rel="stylesheet" href="./styles.css?v=20260828-9" />
   </head>
   <body>
     <a class="skip-link" href="#studio">跳到制作台</a>
@@ -67,8 +67,9 @@
                 <b>AI 正在看球</b>
               </div>
               <div class="feed-frame promo-feed-frame">
-                <video id="product-promo-video" class="promo-video" src="/product-demo.mp4" poster="/product-demo-cover.jpg" aria-label="COURTCAST 产品宣传视频" muted loop playsinline preload="metadata">
-                  <track kind="captions" src="/product-demo-captions.vtt?v=20260827-2" srclang="zh-CN" label="中文" default />
+                <video id="product-promo-backdrop" class="promo-video-backdrop" src="/product-demo.mp4?v=20260828-1" poster="/product-demo-cover.jpg?v=20260828-1" muted playsinline preload="metadata" aria-hidden="true" tabindex="-1"></video>
+                <video id="product-promo-video" class="promo-video" src="/product-demo.mp4?v=20260828-1" poster="/product-demo-cover.jpg?v=20260828-1" aria-label="COURTCAST 产品宣传视频" muted playsinline preload="metadata">
+                  <track kind="captions" src="/product-demo-captions.vtt?v=20260828-1" srclang="zh-CN" label="中文" default />
                   当前浏览器不支持视频播放。
                 </video>
                 <div class="comic-video-scrim" aria-hidden="true"></div>
@@ -122,7 +123,8 @@
       </header>
 
       <section id="studio" class="workspace">
-        <form id="job-form" class="card settings-card">
+        <form id="job-form" class="card settings-card" novalidate>
+          <div id="settings-scroll-body" class="settings-scroll-body" tabindex="0" aria-label="转播台设置">
           <div class="card-heading">
             <div class="card-title-lockup">
               <h2>把比赛片段交给转播台</h2>
@@ -130,6 +132,7 @@
             </div>
             <span class="required-note">* 必填</span>
           </div>
+          <button id="resume-result" class="resume-result hidden" type="button">← 回到刚才的成片校对台</button>
 
           <label id="drop-zone" class="drop-zone" for="video">
             <input id="video" name="video" type="file" accept="video/mp4,video/quicktime,video/webm,.m4v" required />
@@ -219,11 +222,19 @@
             <div class="field-help"><span>无需写解说稿，AI 会根据画面自动组织语言</span><span id="context-count">0 / 500</span></div>
           </div>
 
-          <button id="submit-button" class="primary-button" type="submit">
-            <span class="button-ball" aria-hidden="true"><i></i></span>
-            <span class="button-label">一键生成解说成片</span>
-            <svg class="button-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
-          </button>
+          </div>
+          <div class="settings-card-footer">
+            <button id="settings-scroll-cue" class="settings-scroll-cue hidden" type="button" aria-controls="settings-scroll-body">
+              <span>继续下滑填写完整信息</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m0 0 5.5-5.5M12 19l-5.5-5.5"/></svg>
+            </button>
+            <p id="submit-feedback" class="submit-feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+            <button id="submit-button" class="primary-button" type="submit">
+              <span class="button-ball" aria-hidden="true"><i></i></span>
+              <span class="button-label">一键生成解说成片</span>
+              <svg class="button-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+            </button>
+          </div>
         </form>
 
         <section id="result-panel" class="card preview-card">
@@ -264,38 +275,81 @@
             </div>
 
             <div id="completed-state" class="completed-state hidden">
-              <div class="video-wrap">
-                <video id="result-video" controls playsinline></video>
-              </div>
-              <div class="result-details">
+              <section class="result-player-pane" aria-labelledby="result-player-title">
+                <div class="result-pane-heading">
+                  <div class="review-panel-title">
+                    <span class="panel-number" aria-hidden="true">02</span>
+                    <div>
+                      <p class="result-eyebrow">成片画面</p>
+                      <h3 id="result-player-title">高光成品</h3>
+                    </div>
+                  </div>
+                  <span id="review-playhead-time" class="review-playhead-time">00:00.0</span>
+                </div>
+                <div class="video-wrap">
+                  <video id="result-video" controls playsinline></video>
+                </div>
+                <p class="result-player-help">播放到想补充的位置，点击右侧“在当前画面补一句”；每两句之间也可以直接补充新解说。</p>
+              </section>
+              <div id="result-details" class="result-details" role="region" aria-labelledby="script-pane-title" tabindex="0">
+                <header class="script-pane-heading">
+                  <div class="review-panel-title">
+                    <span class="panel-number" aria-hidden="true">03</span>
+                    <div>
+                      <p>逐句校对</p>
+                      <h2 id="script-pane-title">解说词</h2>
+                    </div>
+                  </div>
+                  <span class="script-scroll-hint">本栏可上下滑动</span>
+                </header>
+                <nav class="review-quick-nav" aria-label="成片校对快速导航">
+                  <button id="review-nav-studio" type="button">
+                    <span>转播台</span>
+                    <small>调整设置</small>
+                  </button>
+                  <button id="review-nav-video" class="is-active" type="button" aria-current="page">
+                    <span>成片</span>
+                    <small>查看画面</small>
+                  </button>
+                  <button id="review-nav-script" type="button">
+                    <span>解说词</span>
+                    <small>逐句校正</small>
+                  </button>
+                </nav>
                 <p class="result-eyebrow">AI 解说稿</p>
                 <h3 id="result-title">今晚的篮球高光</h3>
                 <p id="result-commentary"></p>
-                <div id="mode-note" class="mode-note"></div>
                 <aside class="correction-guide" aria-label="矫正解说词">
                   <span class="correction-ball" aria-hidden="true"><i></i></span>
                   <div><strong>这版还不够满意？</strong><p>逐句修改解说词和出现时间，再重新配音生成修正版，原成片会保留。</p></div>
                   <button id="open-correction" type="button">去矫正解说词</button>
                 </aside>
+                <button id="review-scroll-cue" class="review-scroll-cue hidden" type="button">
+                  <span>
+                    <strong>上滑查看完整解说词</strong>
+                    <small>点击可直接到逐句校正</small>
+                  </span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0L6.5 10.5M12 5l5.5 5.5"/></svg>
+                </button>
                 <section id="event-timeline" class="event-timeline hidden" aria-labelledby="event-timeline-title">
                   <div class="event-timeline-heading">
                     <div>
                       <p class="result-eyebrow">逐句矫正</p>
-                      <h4 id="event-timeline-title">修改解说词与出现时间</h4>
+                      <h4 id="event-timeline-title">解说稿 · 点击定位画面</h4>
                     </div>
                     <div class="event-timeline-heading-actions">
                       <span id="event-count"></span>
-                      <button id="timeline-edit-toggle" type="button">开始矫正</button>
+                      <button id="timeline-edit-toggle" type="button">直接修改</button>
                     </div>
                   </div>
                   <p id="event-timeline-help" class="event-timeline-help">点击任意一句，视频会跳到对应动作。标记为“请复核”的句子建议重点检查。</p>
                   <div id="event-timeline-list" class="event-timeline-list"></div>
+                  <p id="timeline-edit-status" class="timeline-edit-status hidden"></p>
                   <div id="timeline-edit-actions" class="timeline-edit-actions hidden">
-                    <button id="timeline-add-event" type="button">＋ 添加一句</button>
+                    <button id="timeline-add-event" type="button">＋ 在当前画面补一句</button>
                     <button id="timeline-cancel-edit" type="button">取消</button>
                     <button id="timeline-render-revision" class="timeline-render-revision" type="button">重新配音并生成修正版</button>
                   </div>
-                  <p id="timeline-edit-status" class="timeline-edit-status hidden"></p>
                 </section>
                 <div class="result-actions">
                   <a id="download-link" class="download-button" href="#" download>
@@ -310,6 +364,7 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Zm-3 8H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                     <span>复制解说词</span>
                   </button>
+                  <button id="return-to-setup" class="copy-button" type="button">返回上传设置</button>
                 </div>
               </div>
             </div>
@@ -342,6 +397,7 @@
         <span>视频文件保存在当前运行设备</span>
       </footer>
     </main>
-    <script src="./app.js?v=20260827-3"></script>
+    <script src="/static/timeline-utils.js?v=20260827-1"></script>
+    <script src="./app.js?v=20260828-7"></script>
   </body>
 </html>

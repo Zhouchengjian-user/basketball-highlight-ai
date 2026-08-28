@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>解说时间微调控件 · 状态预览</title>
+    <link rel="stylesheet" href="/styles.css?v=20260828-7" />
+    <style>
+      body { padding: 28px; background: var(--mist); }
+      main { width: min(620px, 100%); display: grid; gap: 12px; }
+      article { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 14px; }
+      article > span { font: 800 11px/1.2 ui-monospace, monospace; }
+      .preview-row { min-height: 54px; display: flex; align-items: center; padding: 5px; background: var(--paper); }
+      .is-hover .event-editor-time-step { color: var(--paper); background: var(--ball); }
+      .is-focus .event-editor-time { outline: 3px solid var(--ball-bright); outline-offset: -3px; }
+      .is-active .event-editor-time-increase { color: var(--paper); background: var(--ink); transform: translateY(1px); }
+      .is-error .event-editor-time { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
+    </style>
+  </head>
+  <body class="workspace-review-mode">
+    <main>
+      <h1>解说时间微调控件 · 8 种状态</h1>
+      <div id="states"></div>
+    </main>
+    <script>
+      const states = ["默认", "悬停", "键盘焦点", "按下", "不可用", "处理中", "错误", "已保存"];
+      const classes = ["", "is-hover", "is-focus", "is-active", "is-disabled", "is-loading", "is-error", "is-saved"];
+      const host = document.querySelector("#states");
+      states.forEach((label, index) => {
+        const article = document.createElement("article");
+        const disabled = index === 4 ? "disabled" : "";
+        const busy = index === 5 ? 'aria-busy="true"' : 'aria-busy="false"';
+        article.innerHTML = `<span>${label}</span><div class="preview-row ${classes[index]}"><div class="event-editor-time-control ${classes[index]}" ${busy}><input class="event-editor-time" type="number" value="4.6" step="0.1" ${disabled}><span class="event-editor-time-stepper"><button class="event-editor-time-step event-editor-time-increase" ${disabled}>▲</button><button class="event-editor-time-step event-editor-time-decrease" ${disabled}>▼</button></span></div></div>`;
+        host.append(article);
+      });
+    </script>
+  </body>
+</html>
